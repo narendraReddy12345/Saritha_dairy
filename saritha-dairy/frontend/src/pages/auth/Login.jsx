@@ -63,7 +63,8 @@ const Login = () => {
       const result = await loginAdmin(phone, password);
       console.log('Admin login result:', result);
       if (result.success) {
-        navigate('/dashboard', { replace: true });
+        // ✅ Force full page reload to refresh AuthContext
+        window.location.href = '/dashboard';
         return;
       } else {
         setError(result.error || 'Invalid admin credentials');
@@ -75,14 +76,16 @@ const Login = () => {
     const deliveryResult = await loginDeliveryBoy(phone, password);
     console.log('Delivery login result:', deliveryResult);
     if (deliveryResult.success) {
-      navigate('/delivery/dashboard', { replace: true });
+      // ✅ Force full page reload to refresh AuthContext
+      window.location.href = '/delivery/dashboard';
       return;
     }
     
     const customerResult = await loginCustomer(phone, password);
     console.log('Customer login result:', customerResult);
     if (customerResult.success) {
-      navigate('/customer/dashboard', { replace: true });
+      // ✅ Force full page reload to refresh AuthContext
+      window.location.href = '/customer/dashboard';
       return;
     }
     
