@@ -384,4 +384,37 @@
   .login-footer {
     border-top-color: #333;
   }
+}/* Logo Image */
+.login-logo-img {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  object-fit: cover;
+  margin-bottom: 16px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+  border: 3px solid #e8f5e9;
+  transition: transform 0.3s ease;
+}
+
+.login-logo-img:hover {
+  transform: scale(1.05);
+}
+
+.login-brand {
+  margin-bottom: 30px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.login-brand h1 {
+  font-size: 24px;
+  color: #1a472a;
+  margin: 0 0 6px;
+}
+
+.login-brand p {
+  font-size: 13px;
+  color: #666;
+  margin: 0;
 }

@@ -1,6 +1,5 @@
 // src/pages/auth/Login.jsx
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../components/contexts/AuthContext';
 import { loginAdmin, loginDeliveryBoy, loginCustomer } from '../../api/auth';
 import './Login.css';
@@ -12,25 +11,34 @@ const Login = () => {
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const { isAdminUser, isDeliveryBoy, isCustomer, loading: authLoading } = useAuth();
-  const navigate = useNavigate();
 
   useEffect(() => {
     if (!authLoading) {
       if (isAdminUser) {
-        navigate('/dashboard', { replace: true });
+        window.location.href = '/dashboard';
       } else if (isDeliveryBoy) {
-        navigate('/delivery/dashboard', { replace: true });
+        window.location.href = '/delivery/dashboard';
       } else if (isCustomer) {
-        navigate('/customer/dashboard', { replace: true });
+        window.location.href = '/customer/dashboard';
       }
     }
-  }, [authLoading, isAdminUser, isDeliveryBoy, isCustomer, navigate]);
+  }, [authLoading, isAdminUser, isDeliveryBoy, isCustomer]);
+
+  // Clear any autofilled values on mount
+  useEffect(() => {
+    setPhone('');
+    setPassword('');
+  }, []);
 
   if (authLoading) {
     return (
       <div className="login-page">
         <div className="login-wrapper" style={{ textAlign: 'center', padding: '60px' }}>
-          <div className="login-logo">🥛</div>
+          <img 
+            src="https://res.cloudinary.com/dzuixvh7w/image/upload/v1/NjNkMTQ0OTAtMmFjYi00ODQ1LTg0ZWEtODEzNjgwMGY3ZmMwX2Z3cmZwdA==" 
+            alt="Saritha Dairy" 
+            style={{ width: '80px', height: '80px', borderRadius: '50%', objectFit: 'cover' }}
+          />
           <p style={{ marginTop: '20px', color: '#666' }}>Loading...</p>
         </div>
       </div>
@@ -61,9 +69,7 @@ const Login = () => {
     
     if (phone === ADMIN_PHONE) {
       const result = await loginAdmin(phone, password);
-      console.log('Admin login result:', result);
       if (result.success) {
-        // ✅ Force full page reload to refresh AuthContext
         window.location.href = '/dashboard';
         return;
       } else {
@@ -74,17 +80,13 @@ const Login = () => {
     }
     
     const deliveryResult = await loginDeliveryBoy(phone, password);
-    console.log('Delivery login result:', deliveryResult);
     if (deliveryResult.success) {
-      // ✅ Force full page reload to refresh AuthContext
       window.location.href = '/delivery/dashboard';
       return;
     }
     
     const customerResult = await loginCustomer(phone, password);
-    console.log('Customer login result:', customerResult);
     if (customerResult.success) {
-      // ✅ Force full page reload to refresh AuthContext
       window.location.href = '/customer/dashboard';
       return;
     }
@@ -93,17 +95,16 @@ const Login = () => {
     setLoading(false);
   };
 
-  const quickLogin = (phoneNum, pass) => {
-    setPhone(phoneNum);
-    setPassword(pass);
-  };
-
   return (
     <div className="login-page">
       <div className="login-wrapper">
         {/* Logo & Brand */}
         <div className="login-brand">
-          <div className="login-logo">🥛</div>
+          <img 
+            src="https://res.cloudinary.com/dzuixvh7w/image/upload/v1777714202/63d14490-2acb-4845-84ea-8136800f7fc0_fwrfpt.jpg" 
+            alt="Saritha Dairy Logo" 
+            className="login-logo-img"
+          />
           <h1>SARITHA DAIRY</h1>
           <p>Pure by Nature, Trusted by Families</p>
         </div>
@@ -129,6 +130,8 @@ const Login = () => {
               maxLength={10}
               className="login-input"
               autoFocus
+              autoComplete="off"
+              name="phone"
             />
           </div>
           
@@ -141,6 +144,8 @@ const Login = () => {
               onChange={(e) => setPassword(e.target.value)} 
               required 
               className="login-input"
+              autoComplete="new-password"
+              name="password-new"
             />
             <button 
               type="button" 
