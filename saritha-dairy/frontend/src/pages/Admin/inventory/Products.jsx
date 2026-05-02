@@ -35,7 +35,8 @@ const Products = () => {
   const fetchProducts = async () => {
     setLoading(true);
     try {
-      const response = await fetch(`${API_URL}/api/products`, {
+      // ✅ FIXED: Removed extra /api
+      const response = await fetch(`${API_URL}/products`, {
         headers: {
           'Content-Type': 'application/json',
           ...getAuthHeaders()
@@ -127,9 +128,10 @@ const Products = () => {
     }
 
     try {
+      // ✅ FIXED: Removed extra /api
       const url = editingProduct 
-        ? `${API_URL}/api/products/${editingProduct.id}`
-        : `${API_URL}/api/products`;
+        ? `${API_URL}/products/${editingProduct.id}`
+        : `${API_URL}/products`;
       
       const response = await fetch(url, {
         method: editingProduct ? 'PUT' : 'POST',
@@ -159,7 +161,8 @@ const Products = () => {
   const handleDelete = async (id, name) => {
     if (window.confirm(`Delete "${name}"?`)) {
       try {
-        const response = await fetch(`${API_URL}/api/products/${id}`, {
+        // ✅ FIXED: Removed extra /api
+        const response = await fetch(`${API_URL}/products/${id}`, {
           method: 'DELETE',
           headers: {
             'Content-Type': 'application/json',
