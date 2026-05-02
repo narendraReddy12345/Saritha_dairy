@@ -1,5 +1,5 @@
 // src/api/auth.js
-const API_URL = 'http://localhost:5000/api';
+const API_URL = 'https://saritha-dairy-api.onrender.com';
 
 export const loginAdmin = async (phone, password) => {
   try {
