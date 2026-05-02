@@ -1,0 +1,18 @@
+/* Reset all default margins */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+/* Remove default margins from form elements */
+form, fieldset, .form-group, .input-group, .field-group {
+  margin: 0;
+  padding: 0;
+}
+
+/* Ensure all inputs align properly */
+input, select, textarea, button {
+  margin: 0;
+  font-family: inherit;
+}

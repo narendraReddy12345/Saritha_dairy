@@ -1,0 +1,414 @@
+/* Dashboard.css - Compact & User-Friendly */
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+.compact-dashboard {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 20px;
+  background: #f0f2f5;
+  min-height: 100vh;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* Header */
+.compact-header {
+  background: white;
+  border-radius: 20px;
+  padding: 16px 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.header-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.header-icon {
+  font-size: 32px;
+}
+
+.header-title h1 {
+  font-size: 20px;
+  font-weight: 600;
+  color: #1a1a2e;
+}
+
+.header-title p {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.header-time {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #f8fafc;
+  padding: 8px 18px;
+  border-radius: 40px;
+}
+
+.time-icon {
+  font-size: 18px;
+}
+
+.time {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1a1a2e;
+}
+
+.date {
+  font-size: 11px;
+  color: #64748b;
+}
+
+/* Stats Row */
+.stats-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.mini-card {
+  background: white;
+  border-radius: 16px;
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  position: relative;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.mini-card-icon {
+  font-size: 36px;
+}
+
+.mini-card-value {
+  font-size: 22px;
+  font-weight: 700;
+  color: #1a1a2e;
+}
+
+.mini-card-label {
+  font-size: 11px;
+  color: #64748b;
+  margin-top: 2px;
+}
+
+.mini-badge {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  padding: 2px 8px;
+  border-radius: 20px;
+  font-size: 10px;
+  font-weight: 600;
+  color: white;
+}
+
+/* Products Grid */
+.products-compact-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.product-compact-card {
+  background: white;
+  border-radius: 16px;
+  overflow: hidden;
+  transition: all 0.2s;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.product-compact-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
+}
+
+/* Card Header */
+.card-header {
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  background: white;
+}
+
+.card-icon {
+  width: 50px;
+  height: 50px;
+  border-radius: 14px;
+  background: #f8fafc;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  font-size: 28px;
+}
+
+.card-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.card-info {
+  flex: 1;
+}
+
+.card-info h4 {
+  font-size: 15px;
+  font-weight: 600;
+  color: #1a1a2e;
+  margin-bottom: 6px;
+}
+
+.card-stats {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.stock-badge {
+  padding: 2px 8px;
+  border-radius: 20px;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.stock-qty {
+  font-size: 11px;
+  color: #64748b;
+}
+
+.profit-chip {
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.profit-chip.positive {
+  background: #d1fae5;
+  color: #10b981;
+}
+
+.profit-chip.negative {
+  background: #fee2e2;
+  color: #ef4444;
+}
+
+/* Financial Row */
+.financial-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  padding: 12px 16px;
+  background: #fafbfc;
+  border-top: 1px solid #f0f0f0;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.financial-col {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.financial-col span {
+  font-size: 10px;
+  color: #64748b;
+}
+
+.financial-col strong {
+  font-size: 14px;
+  font-weight: 700;
+  color: #1a1a2e;
+}
+
+/* Stock Bar */
+.stock-bar-mini {
+  padding: 12px 16px;
+}
+
+.stock-bar-bg {
+  height: 6px;
+  background: #e2e8f0;
+  border-radius: 10px;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+
+.stock-bar-fill {
+  height: 100%;
+  border-radius: 10px;
+  transition: width 0.3s;
+}
+
+.stock-bar-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  color: #64748b;
+}
+
+/* Expanded Details */
+.card-expanded {
+  padding: 16px;
+  background: #fafbfc;
+  border-top: 1px solid #f0f0f0;
+  animation: slideDown 0.2s ease;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.expanded-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.expanded-item {
+  display: flex;
+  justify-content: space-between;
+  background: white;
+  padding: 8px 12px;
+  border-radius: 10px;
+  font-size: 11px;
+}
+
+.expanded-item span {
+  color: #64748b;
+}
+
+.expanded-item strong {
+  color: #1a1a2e;
+}
+
+.expanded-packs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.pack-tag {
+  background: white;
+  padding: 5px 12px;
+  border-radius: 20px;
+  font-size: 11px;
+  color: #3f51b5;
+  font-weight: 500;
+}
+
+/* Quick Actions Bar */
+.quick-actions-bar {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+
+.quick-actions-bar button {
+  background: white;
+  border: none;
+  padding: 12px;
+  border-radius: 14px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  color: #1a1a2e;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.quick-actions-bar button:hover {
+  background: #3f51b5;
+  color: white;
+  transform: translateY(-2px);
+}
+
+/* Loading */
+.loading-compact {
+  text-align: center;
+  padding: 60px;
+  background: white;
+  border-radius: 20px;
+  color: #64748b;
+}
+
+/* Responsive */
+@media (max-width: 1024px) {
+  .products-compact-grid {
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  }
+}
+
+@media (max-width: 768px) {
+  .compact-dashboard {
+    padding: 16px;
+  }
+  
+  .compact-header {
+    flex-direction: column;
+    gap: 12px;
+    text-align: center;
+  }
+  
+  .stats-row {
+    grid-template-columns: 1fr;
+  }
+  
+  .products-compact-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .financial-row {
+    flex-direction: column;
+    gap: 8px;
+  }
+  
+  .quick-actions-bar {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .expanded-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 480px) {
+  .quick-actions-bar {
+    grid-template-columns: 1fr;
+  }
+  
+  .card-header {
+    flex-wrap: wrap;
+  }
+  
+  .profit-chip {
+    margin-left: auto;
+  }
+}

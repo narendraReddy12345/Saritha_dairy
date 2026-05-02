@@ -1,0 +1,86 @@
+/* src/pages/Admin/DeliveryBoys/DeliveryBoyManagement.css */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+.dbm-container { padding: 24px; max-width: 1400px; margin: 0 auto; font-family: 'Segoe UI', system-ui, sans-serif; }
+
+/* Toast */
+.dbm-toast { position: fixed; top: 20px; right: 20px; z-index: 4000; padding: 14px 20px; border-radius: 10px; color: white; display: flex; align-items: center; gap: 12px; box-shadow: 0 8px 25px rgba(0,0,0,0.2); animation: slideIn 0.3s; }
+.dbm-toast.success { background: #4caf50; } .dbm-toast.error { background: #ef4444; }
+.dbm-toast button { background: rgba(255,255,255,0.2); border: none; color: white; cursor: pointer; padding: 2px 8px; border-radius: 50%; font-size: 16px; }
+@keyframes slideIn { from { transform: translateX(120%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+
+/* Header */
+.dbm-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 12px; }
+.dbm-header h1 { color: #1a472a; font-size: 24px; } .dbm-header p { color: #666; font-size: 13px; margin-top: 3px; }
+.dbm-btn-primary { background: #4caf50; color: white; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 600; font-size: 13px; cursor: pointer; transition: all 0.2s; white-space: nowrap; }
+.dbm-btn-primary:hover { background: #388e3c; } .dbm-btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
+.dbm-btn-cancel { background: #f0f0f0; color: #666; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 500; font-size: 13px; cursor: pointer; }
+
+/* Stats */
+.dbm-stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; margin-bottom: 20px; }
+.dbm-stat { background: white; padding: 16px; border-radius: 10px; display: flex; align-items: center; gap: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); } .dbm-stat span { font-size: 28px; }
+.dbm-stat h3 { font-size: 20px; color: #1a472a; } .dbm-stat p { font-size: 11px; color: #666; }
+
+/* Search */
+.dbm-search { position: relative; margin-bottom: 16px; max-width: 400px; }
+.dbm-search span { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); }
+.dbm-search input { width: 100%; padding: 10px 14px 10px 40px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 13px; }
+.dbm-search input:focus { outline: none; border-color: #4caf50; }
+
+/* Table */
+.dbm-table-wrap { background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 6px rgba(0,0,0,0.06); overflow-x: auto; }
+.dbm-table { width: 100%; border-collapse: collapse; min-width: 900px; }
+.dbm-table thead th { background: #1a472a; color: white; padding: 12px 14px; text-align: left; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
+.dbm-table tbody td { padding: 12px 14px; border-bottom: 1px solid #f0f0f0; font-size: 13px; }
+.dbm-table tbody tr:hover { background: #f8fdf5; } .dbm-table tbody tr.row-inactive { opacity: 0.5; }
+.dbm-name-cell { display: flex; align-items: center; gap: 10px; } .dbm-name-cell small { display: block; color: #888; font-size: 11px; }
+.dbm-avatar-sm { width: 34px; height: 34px; border-radius: 50%; background: linear-gradient(135deg, #4caf50, #1a472a); color: white; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; flex-shrink: 0; }
+.dbm-badge { background: #e8f5e9; color: #2e7d32; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; text-transform: capitalize; }
+.dbm-link { background: none; border: none; color: #2196f3; cursor: pointer; font-size: 13px; font-weight: 500; }
+.dbm-link:hover { text-decoration: underline; }
+.dbm-status-btn { padding: 5px 12px; border: none; border-radius: 20px; cursor: pointer; font-size: 11px; font-weight: 600; }
+.dbm-status-btn.active { background: #e8f5e9; color: #2e7d32; } .dbm-status-btn.inactive { background: #ffebee; color: #c62828; }
+.dbm-actions { display: flex; gap: 4px; } .dbm-icon-btn { width: 30px; height: 30px; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; background: #f5f5f5; transition: all 0.2s; } .dbm-icon-btn:hover { background: #e0e0e0; } .dbm-icon-btn.danger { color: #ef4444; } .dbm-icon-btn.danger:hover { background: #ffebee; }
+
+/* Modal */
+.dbm-modal { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 3000; padding: 20px; animation: fadeIn 0.2s; }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+.dbm-modal-box { background: white; border-radius: 16px; width: 100%; max-width: 600px; max-height: 90vh; overflow-y: auto; }
+.dbm-modal-lg { max-width: 900px; }
+.dbm-modal-header { padding: 18px 24px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; background: white; z-index: 1; }
+.dbm-modal-header h2 { color: #1a472a; font-size: 18px; } .dbm-modal-header p { color: #888; font-size: 12px; }
+.dbm-modal-header button { background: #f0f0f0; border: none; width: 30px; height: 30px; border-radius: 50%; cursor: pointer; font-size: 16px; }
+.dbm-form { padding: 24px; } .dbm-form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
+.dbm-field { display: flex; flex-direction: column; } .dbm-field label { font-size: 12px; font-weight: 600; color: #444; margin-bottom: 4px; }
+.dbm-field input, .dbm-field select { padding: 9px 12px; border: 2px solid #e8e8e8; border-radius: 7px; font-size: 13px; font-family: inherit; }
+.dbm-field input:focus, .dbm-field select:focus { outline: none; border-color: #4caf50; }
+.dbm-pw { position: relative; } .dbm-pw input { width: 100%; padding-right: 38px; } .dbm-pw button { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; font-size: 16px; }
+.dbm-form-actions { display: flex; justify-content: flex-end; gap: 10px; padding-top: 18px; border-top: 1px solid #eee; margin-top: 10px; }
+
+/* Assign Modal */
+.dbm-assign-search { position: relative; padding: 16px 24px; border-bottom: 1px solid #eee; }
+.dbm-assign-search span { position: absolute; left: 38px; top: 50%; transform: translateY(-50%); }
+.dbm-assign-search input { width: 100%; padding: 10px 14px 10px 38px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 13px; }
+.dbm-assign-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0; max-height: 400px; }
+.dbm-assign-col { padding: 16px 24px; overflow-y: auto; border-right: 1px solid #eee; }
+.dbm-assign-col:last-child { border-right: none; } .dbm-assign-col h4 { margin-bottom: 12px; color: #1a472a; font-size: 14px; }
+.dbm-assign-list { display: flex; flex-direction: column; gap: 8px; }
+.dbm-assign-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid #e0e0e0; border-radius: 8px; cursor: pointer; transition: all 0.2s; }
+.dbm-assign-item:hover { border-color: #4caf50; background: #f8fdf5; } .dbm-assign-item.selected { border-color: #4caf50; background: #e8f5e9; }
+.dbm-assign-item input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; accent-color: #4caf50; }
+.dbm-assign-item small { display: block; color: #888; font-size: 11px; }
+.dbm-assign-item.assigned { cursor: default; background: #fafafa; }
+.dbm-remove-assign { background: #ffebee; border: none; color: #c62828; width: 26px; height: 26px; border-radius: 50%; cursor: pointer; font-size: 14px; flex-shrink: 0; }
+.dbm-no-data { color: #999; text-align: center; padding: 20px; font-size: 13px; }
+.dbm-assign-footer { display: flex; justify-content: space-between; align-items: center; padding: 16px 24px; border-top: 1px solid #eee; background: #fafafa; }
+.dbm-assign-footer span { color: #666; font-size: 13px; }
+
+.dbm-loading { text-align: center; padding: 60px; color: #666; }
+
+@media (max-width: 768px) {
+  .dbm-container { padding: 12px; } .dbm-header { flex-direction: column; }
+  .dbm-stats-row { grid-template-columns: repeat(2, 1fr); }
+  .dbm-form-row { grid-template-columns: 1fr; }
+  .dbm-assign-grid { grid-template-columns: 1fr; max-height: none; }
+  .dbm-modal-box { max-width: 100%; border-radius: 16px 16px 0 0; margin-top: auto; }
+}
+

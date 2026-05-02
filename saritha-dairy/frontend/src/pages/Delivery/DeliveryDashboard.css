@@ -1,0 +1,150 @@
+/* src/pages/Delivery/DeliveryDashboard.css */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+.dd-app {
+  max-width: 500px;
+  margin: 0 auto;
+  background: #f0f4f0;
+  min-height: 100vh;
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  padding-bottom: 40px;
+}
+
+/* Loading */
+.dd-loading-screen { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; gap: 16px; background: #f5f7f5; }
+.dd-loader-icon { font-size: 60px; animation: bounce 0.8s infinite alternate; }
+@keyframes bounce { from { transform: translateY(0); } to { transform: translateY(-20px); } }
+.dd-loading-screen p { color: #666; font-size: 15px; }
+
+/* Toast */
+.dd-toast {
+  position: fixed; top: 12px; left: 50%; transform: translateX(-50%); z-index: 9999;
+  padding: 12px 20px; border-radius: 25px; color: white; font-size: 13px; font-weight: 600;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.2); display: flex; align-items: center; gap: 8px; white-space: nowrap;
+}
+.dd-toast.success { background: #4caf50; } .dd-toast.error { background: #ef4444; }
+.dd-toast button { background: rgba(255,255,255,0.2); border: none; color: white; border-radius: 50%; width: 22px; height: 22px; cursor: pointer; font-size: 14px; }
+
+/* Header Card */
+.dd-header-card {
+  background: linear-gradient(135deg, #1a472a, #2d6a4f);
+  color: white; padding: 20px 16px 16px; border-radius: 0 0 24px 24px;
+  box-shadow: 0 4px 15px rgba(26,71,42,0.3);
+}
+.dd-header-top { display: flex; justify-content: space-between; align-items: center; }
+.dd-user-info { display: flex; gap: 12px; align-items: center; cursor: pointer; }
+.dd-avatar {
+  width: 52px; height: 52px; border-radius: 50%; background: rgba(255,255,255,0.2);
+  display: flex; align-items: center; justify-content: center; font-size: 24px; font-weight: 700;
+  border: 2px solid rgba(255,255,255,0.3); position: relative;
+}
+.dd-online { position: absolute; bottom: 3px; right: 3px; width: 12px; height: 12px; background: #4caf50; border-radius: 50%; border: 2px solid white; }
+.dd-user-info h2 { font-size: 18px; font-weight: 700; }
+.dd-user-info p { font-size: 12px; opacity: 0.85; margin-top: 2px; }
+.dd-logout-icon { background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.2); color: white; width: 40px; height: 40px; border-radius: 50%; cursor: pointer; font-size: 18px; }
+.dd-header-tags { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+.dd-header-tags span { background: rgba(255,255,255,0.1); padding: 5px 12px; border-radius: 20px; font-size: 11px; }
+
+/* Profile Popup */
+.dd-profile-popup { background: white; border-radius: 14px; padding: 16px; margin-top: 14px; color: #333; animation: fadeIn 0.2s; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+.dd-profile-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #f0f0f0; font-size: 13px; }
+.dd-close-profile { width: 100%; padding: 10px; margin-top: 10px; background: #f0f0f0; border: none; border-radius: 10px; cursor: pointer; font-weight: 600; font-size: 13px; }
+
+/* Stats Bar */
+.dd-stats-bar { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; padding: 14px; margin-top: -6px; }
+.dd-stat-item { background: white; border-radius: 14px; padding: 12px 8px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+.dd-stat-item.pending { border-bottom: 3px solid #ff9800; } .dd-stat-item.done { border-bottom: 3px solid #4caf50; }
+.dd-stat-icon { font-size: 22px; display: block; }
+.dd-stat-value { font-size: 18px; font-weight: 800; color: #1a472a; display: block; margin: 4px 0; }
+.dd-stat-label { font-size: 10px; color: #888; text-transform: uppercase; letter-spacing: 0.5px; }
+
+/* Progress Bar */
+.dd-progress-section { padding: 0 14px 14px; }
+.dd-progress-text { display: flex; justify-content: space-between; font-size: 12px; color: #555; margin-bottom: 6px; font-weight: 500; }
+.dd-progress-track { height: 8px; background: #e0e0e0; border-radius: 10px; overflow: hidden; }
+.dd-progress-fill { height: 100%; background: linear-gradient(90deg, #4caf50, #2e7d32); border-radius: 10px; transition: width 0.5s ease; }
+
+/* Tabs */
+.dd-tabs-row { display: flex; gap: 6px; padding: 0 14px 14px; align-items: center; }
+.dd-tab-btn { padding: 10px 16px; border: none; border-radius: 10px; cursor: pointer; font-weight: 600; font-size: 12px; background: white; color: #666; box-shadow: 0 1px 3px rgba(0,0,0,0.06); transition: all 0.2s; white-space: nowrap; }
+.dd-tab-btn.active { background: #1a472a; color: white; }
+.dd-mini-search { position: relative; flex: 1; min-width: 100px; }
+.dd-mini-search span { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); font-size: 12px; }
+.dd-mini-search input { width: 100%; padding: 10px 10px 10px 30px; border: 1px solid #e0e0e0; border-radius: 10px; font-size: 12px; background: white; }
+
+/* Cards List */
+.dd-cards-list { padding: 0 14px; display: flex; flex-direction: column; gap: 12px; }
+
+/* Empty State */
+.dd-empty-state { text-align: center; padding: 50px 20px; color: #666; }
+.dd-empty-state span { font-size: 60px; display: block; margin-bottom: 12px; }
+.dd-empty-state h3 { font-size: 18px; color: #333; margin-bottom: 6px; }
+.dd-empty-state p { font-size: 13px; }
+
+/* Customer Card */
+.dd-customer-card { background: white; border-radius: 16px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.06); border-left: 4px solid #ff9800; transition: all 0.2s; }
+.dd-customer-card.delivered { border-left-color: #4caf50; opacity: 0.8; }
+.dd-customer-card.expanded { box-shadow: 0 4px 20px rgba(0,0,0,0.1); }
+
+/* Card Main */
+.dd-card-main { padding: 14px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
+.dd-card-left { display: flex; gap: 10px; align-items: center; flex: 1; min-width: 0; }
+.dd-card-avatar {
+  width: 44px; height: 44px; border-radius: 50%; background: linear-gradient(135deg, #4caf50, #1a472a);
+  color: white; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 18px;
+  position: relative; flex-shrink: 0;
+}
+.dd-check-mark { position: absolute; bottom: -2px; right: -2px; background: #4caf50; color: white; width: 20px; height: 20px; border-radius: 50%; font-size: 11px; display: flex; align-items: center; justify-content: center; border: 2px solid white; }
+.dd-card-info { min-width: 0; }
+.dd-card-info h4 { font-size: 15px; color: #1a472a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dd-card-info p { font-size: 11px; color: #888; }
+.dd-card-area { font-size: 10px !important; color: #aaa !important; }
+.dd-card-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; margin-left: 8px; }
+.dd-card-amount { font-weight: 700; color: #1a472a; font-size: 15px; }
+.dd-card-badge { padding: 4px 10px; border-radius: 20px; font-size: 10px; font-weight: 700; }
+.dd-card-badge.pending { background: #fff3e0; color: #e65100; }
+.dd-card-badge.done { background: #e8f5e9; color: #2e7d32; }
+.dd-expand-arrow { font-size: 10px; color: #aaa; }
+
+/* Card Expanded */
+.dd-card-expanded { padding: 0 14px 14px; border-top: 1px solid #f0f0f0; animation: slideDown 0.2s ease; }
+@keyframes slideDown { from { opacity: 0; max-height: 0; } to { opacity: 1; max-height: 500px; } }
+
+/* Address Box */
+.dd-address-box { display: flex; gap: 10px; padding: 12px; background: #f9fafb; border-radius: 10px; margin: 12px 0; }
+.dd-addr-icon { font-size: 18px; flex-shrink: 0; }
+.dd-addr-main { font-size: 13px; font-weight: 600; color: #333; }
+.dd-addr-sub { font-size: 11px; color: #888; } .dd-addr-landmark { font-size: 10px; color: #aaa; font-style: italic; }
+.dd-addr-pin { font-size: 10px; color: #aaa; }
+
+/* Products */
+.dd-products-box { margin: 12px 0; }
+.dd-products-box h5 { font-size: 13px; color: #1a472a; margin-bottom: 8px; }
+.dd-product-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid #f5f5f5; font-size: 12px; }
+.dd-p-name { font-weight: 500; flex: 1; } .dd-p-size { color: #888; font-size: 11px; margin: 0 8px; }
+.dd-p-qty { color: #1a472a; font-weight: 600; } .dd-p-price { font-weight: 700; color: #4caf50; margin-left: 8px; }
+.dd-product-total { display: flex; justify-content: space-between; padding-top: 8px; margin-top: 4px; border-top: 2px solid #e0e0e0; font-weight: 700; font-size: 13px; color: #1a472a; }
+
+/* Notes */
+.dd-notes-box { background: #fffde7; padding: 10px 12px; border-radius: 8px; font-size: 11px; color: #666; margin: 10px 0; }
+
+/* Actions */
+.dd-actions-row { display: flex; gap: 8px; margin: 12px 0; }
+.dd-btn-map, .dd-btn-call { flex: 1; padding: 10px; border: none; border-radius: 10px; cursor: pointer; font-weight: 600; font-size: 12px; }
+.dd-btn-map { background: #e3f2fd; color: #1976d2; } .dd-btn-call { background: #e8f5e9; color: #2e7d32; }
+
+/* Deliver Button */
+.dd-btn-deliver { width: 100%; padding: 14px; background: linear-gradient(135deg, #4caf50, #388e3c); color: white; border: none; border-radius: 12px; font-weight: 700; font-size: 15px; cursor: pointer; margin-top: 8px; box-shadow: 0 4px 12px rgba(76,175,80,0.3); }
+.dd-btn-deliver:active { transform: scale(0.97); }
+
+/* Undo Button */
+.dd-btn-undo { width: 100%; padding: 12px; background: #fff3e0; color: #e65100; border: 1px dashed #ff9800; border-radius: 12px; font-weight: 600; font-size: 14px; cursor: pointer; margin-top: 8px; }
+
+/* Responsive */
+@media (max-width: 400px) {
+  .dd-stats-bar { gap: 6px; padding: 10px; }
+  .dd-stat-item { padding: 10px 6px; }
+  .dd-stat-value { font-size: 16px; }
+  .dd-tab-btn { padding: 8px 12px; font-size: 11px; }
+}

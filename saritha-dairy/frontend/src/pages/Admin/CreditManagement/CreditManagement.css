@@ -1,0 +1,953 @@
+/* src/pages/Admin/CreditManagement/CreditManagement.css */
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+.cr-container {
+  padding: 20px;
+  max-width: 1200px;
+  margin: 0 auto;
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+}
+
+/* ========== TOAST ========== */
+.cr-toast {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 3000;
+  padding: 12px 20px;
+  border-radius: 25px;
+  color: white;
+  font-weight: 600;
+  font-size: 13px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  animation: slideIn 0.3s ease;
+}
+.cr-toast.success {
+  background: #4caf50;
+}
+.cr-toast.error {
+  background: #ef4444;
+}
+.cr-toast button {
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  color: white;
+  border-radius: 50%;
+  width: 22px;
+  height: 22px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(120%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+/* ========== HEADER ========== */
+.cr-header {
+  background: linear-gradient(135deg, #1a472a, #2d6a4f);
+  color: white;
+  padding: 20px 24px;
+  border-radius: 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.cr-header h1 {
+  font-size: 22px;
+  margin: 0;
+}
+.cr-header p {
+  font-size: 12px;
+  opacity: 0.85;
+  margin-top: 2px;
+}
+
+/* ========== BUTTONS ========== */
+.cr-btn-add {
+  padding: 10px 20px;
+  background: #4caf50;
+  color: white;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 14px;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+.cr-btn-add:hover {
+  background: #388e3c;
+  transform: translateY(-1px);
+}
+
+.cr-btn-outline {
+  padding: 10px 20px;
+  background: rgba(255, 255, 255, 0.15);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 10px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 14px;
+  transition: all 0.2s;
+}
+.cr-btn-outline:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.cr-btn-save {
+  width: 100%;
+  padding: 14px;
+  background: #4caf50;
+  color: white;
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 15px;
+  transition: all 0.2s;
+}
+.cr-btn-save:hover {
+  background: #388e3c;
+}
+
+.cr-btn-cancel {
+  padding: 12px 24px;
+  background: #f0f0f0;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  font-weight: 600;
+  flex: 1;
+}
+
+.cr-btn-pay-lg {
+  padding: 12px 24px;
+  background: #e8f5e9;
+  color: #2e7d32;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 14px;
+  flex: 1;
+  transition: all 0.2s;
+}
+.cr-btn-pay-lg:hover {
+  background: #c8e6c9;
+}
+
+.cr-btn-del-sm {
+  background: #ffebee;
+  border: none;
+  color: #c62828;
+  padding: 6px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.2s;
+}
+.cr-btn-del-sm:hover {
+  background: #ffcdd2;
+}
+
+/* ========== BANNER ========== */
+.cr-banner {
+  background: #fff3e0;
+  color: #e65100;
+  padding: 12px 16px;
+  border-radius: 10px;
+  margin-bottom: 16px;
+  font-weight: 500;
+  font-size: 13px;
+  border-left: 4px solid #ff9800;
+}
+
+/* ========== SEARCH ========== */
+.cr-search-wrap {
+  position: relative;
+  margin-bottom: 16px;
+}
+.cr-search-wrap span {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+.cr-search-input {
+  width: 100%;
+  padding: 12px 14px 12px 40px;
+  border: 2px solid #e0e0e0;
+  border-radius: 10px;
+  font-size: 14px;
+  font-family: inherit;
+  transition: all 0.2s;
+}
+.cr-search-input:focus {
+  outline: none;
+  border-color: #4caf50;
+}
+
+/* ========== CENTER ========== */
+.cr-center {
+  text-align: center;
+  padding: 50px;
+  color: #666;
+}
+.cr-center h3 {
+  margin: 10px 0;
+  color: #333;
+}
+.cr-center p {
+  font-size: 13px;
+}
+
+/* ========== CUSTOMER CARDS GRID ========== */
+.cr-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 16px;
+}
+
+/* ========== CUSTOMER CARD ========== */
+.cr-card {
+  background: white;
+  border-radius: 16px;
+  padding: 18px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.06);
+  border: 1px solid #eee;
+  transition: all 0.2s;
+}
+.cr-card:hover {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+}
+
+.cr-card-clickable {
+  cursor: pointer;
+}
+.cr-card-clickable:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1);
+  border-color: #4caf50;
+}
+
+.cr-card-top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.cr-card-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #4caf50, #1a472a);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.cr-card-info {
+  flex: 1;
+}
+.cr-card-info h3 {
+  font-size: 15px;
+  color: #1a472a;
+}
+.cr-card-info p {
+  font-size: 11px;
+  color: #888;
+}
+.cr-card-entries {
+  font-size: 10px !important;
+  color: #aaa !important;
+}
+
+.cr-card-balance-box {
+  text-align: center;
+}
+.cr-card-balance-box span {
+  display: block;
+  font-size: 10px;
+  color: #888;
+}
+.cr-card-balance-box strong {
+  font-size: 18px;
+}
+
+/* ========== PROGRESS BAR ========== */
+.cr-bar-wrap {
+  margin-bottom: 12px;
+}
+.cr-bar {
+  height: 6px;
+  background: #e0e0e0;
+  border-radius: 10px;
+  overflow: hidden;
+  margin-bottom: 4px;
+}
+.cr-bar-fill {
+  height: 100%;
+  background: #4caf50;
+  border-radius: 10px;
+  transition: width 0.5s ease;
+}
+
+.cr-card-click-hint {
+  text-align: right;
+  font-size: 11px;
+  color: #4caf50;
+  margin-top: 8px;
+  font-weight: 500;
+}
+
+/* ========== LEDGER HEADER ========== */
+.cr-ledger-header {
+  background: linear-gradient(135deg, #1a472a, #2d6a4f);
+  color: white;
+  padding: 20px;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.cr-back-btn {
+  background: rgba(255, 255, 255, 0.15);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  padding: 8px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 13px;
+  transition: all 0.2s;
+}
+.cr-back-btn:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.cr-ledger-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+}
+
+.cr-ledger-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.cr-ledger-info h2 {
+  font-size: 18px;
+  margin: 0;
+}
+.cr-ledger-info p {
+  font-size: 12px;
+  opacity: 0.8;
+  margin: 2px 0 0;
+}
+
+.cr-ledger-balance {
+  text-align: center;
+}
+.cr-ledger-balance span {
+  display: block;
+  font-size: 11px;
+  opacity: 0.8;
+}
+.cr-ledger-balance strong {
+  font-size: 22px;
+}
+
+/* ========== LEDGER SUMMARY ========== */
+.cr-ledger-summary {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.cr-summary-item {
+  background: white;
+  padding: 14px;
+  border-radius: 12px;
+  text-align: center;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+}
+.cr-summary-item span {
+  display: block;
+  font-size: 11px;
+  color: #888;
+  margin-bottom: 4px;
+}
+.cr-summary-item strong {
+  font-size: 18px;
+  color: #1a472a;
+}
+
+/* ========== LEDGER ACTIONS ========== */
+.cr-ledger-actions {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+.cr-ledger-actions .cr-btn-add {
+  flex: 1;
+}
+
+/* ========== LEDGER TABLE ========== */
+.cr-ledger-table-wrap {
+  background: white;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+  overflow-x: auto;
+}
+
+.cr-ledger-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 700px;
+}
+
+.cr-ledger-table thead th {
+  background: #1a472a;
+  color: white;
+  padding: 12px 14px;
+  text-align: left;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+}
+
+.cr-ledger-table tbody td {
+  padding: 10px 14px;
+  border-bottom: 1px solid #f0f0f0;
+  font-size: 13px;
+  color: #444;
+  vertical-align: middle;
+}
+
+.cr-ledger-table tbody tr:hover {
+  background: #f8fdf5;
+}
+
+.cr-ledger-table tbody tr.settled-row {
+  opacity: 0.6;
+  background: #fafdfa;
+}
+
+.cr-empty-row {
+  text-align: center !important;
+  color: #888 !important;
+  padding: 30px 14px !important;
+  font-size: 13px;
+}
+
+.cr-entry-product {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cr-amount {
+  font-weight: 600;
+  color: #1a472a;
+}
+
+.cr-paid {
+  color: #2e7d32;
+  font-weight: 500;
+}
+
+.cr-balance {
+  font-weight: 600;
+}
+
+/* ========== STATUS DOT ========== */
+.cr-status-dot {
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.cr-status-dot.settled {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+.cr-status-dot.partial {
+  background: #fff8e1;
+  color: #f59e0b;
+}
+.cr-status-dot.pending {
+  background: #fff3e0;
+  color: #e65100;
+}
+
+/* ========== BADGE ========== */
+.cr-badge {
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.cr-badge.settled {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+.cr-badge.partial {
+  background: #fff8e1;
+  color: #f59e0b;
+}
+.cr-badge.pending {
+  background: #fff3e0;
+  color: #e65100;
+}
+
+/* ========== TAGS ========== */
+.cr-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+.cr-tag {
+  background: #f0fdf4;
+  color: #1a472a;
+  padding: 3px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+/* ========== MODAL ========== */
+.cr-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  padding: 20px;
+  animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.cr-modal-box {
+  background: white;
+  border-radius: 20px;
+  width: 100%;
+  max-width: 520px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+  animation: popUp 0.3s ease;
+}
+
+.cr-modal-sm {
+  max-width: 400px;
+}
+
+@keyframes popUp {
+  from {
+    transform: scale(0.95);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* Modal Scrollbar */
+.cr-modal-box::-webkit-scrollbar {
+  width: 5px;
+}
+.cr-modal-box::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 10px;
+}
+.cr-modal-box::-webkit-scrollbar-thumb {
+  background: #4caf50;
+  border-radius: 10px;
+}
+
+.cr-modal-head {
+  padding: 18px 24px;
+  border-bottom: 1px solid #eee;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  position: sticky;
+  top: 0;
+  background: white;
+  z-index: 1;
+  border-radius: 20px 20px 0 0;
+}
+.cr-modal-head h2 {
+  font-size: 18px;
+  color: #1a472a;
+  margin: 0;
+}
+
+.cr-close {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #f0f0f0;
+  border: none;
+  cursor: pointer;
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+.cr-close:hover {
+  background: #e0e0e0;
+}
+
+.cr-modal-body {
+  padding: 20px 24px;
+}
+
+/* ========== FORM FIELDS ========== */
+.cr-field {
+  margin-bottom: 16px;
+}
+.cr-field label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: #555;
+  margin-bottom: 5px;
+}
+.cr-field input,
+.cr-field select {
+  width: 100%;
+  padding: 12px 14px;
+  border: 2px solid #e8e8e8;
+  border-radius: 10px;
+  font-size: 14px;
+  font-family: inherit;
+  transition: all 0.2s;
+  background: white;
+}
+.cr-field input:focus,
+.cr-field select:focus {
+  outline: none;
+  border-color: #4caf50;
+  box-shadow: 0 0 0 3px rgba(76, 175, 80, 0.1);
+}
+
+.cr-row {
+  display: flex;
+  gap: 12px;
+}
+.cr-row .cr-field {
+  flex: 1;
+}
+
+.cr-input-lg {
+  font-size: 20px !important;
+  text-align: center;
+  padding: 16px !important;
+}
+
+/* ========== DIVIDER ========== */
+.cr-divider {
+  text-align: center;
+  color: #aaa;
+  font-size: 12px;
+  margin: 20px 0 16px;
+  position: relative;
+}
+.cr-divider::before,
+.cr-divider::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  width: 30%;
+  height: 1px;
+  background: #e0e0e0;
+}
+.cr-divider::before {
+  left: 0;
+}
+.cr-divider::after {
+  right: 0;
+}
+.cr-divider span {
+  background: white;
+  padding: 0 12px;
+  position: relative;
+  z-index: 1;
+}
+
+/* ========== PRODUCT LIST IN MODAL ========== */
+.cr-product-list {
+  max-height: 300px;
+  overflow-y: auto;
+  border: 2px solid #e8e8e8;
+  border-radius: 10px;
+  padding: 10px;
+  background: #fafafa;
+  margin-bottom: 16px;
+}
+
+.cr-product-group {
+  margin-bottom: 12px;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 10px;
+}
+.cr-product-group:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+  padding-bottom: 0;
+}
+
+.cr-product-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  padding: 4px 0;
+}
+
+.cr-product-img {
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
+  object-fit: cover;
+}
+
+.cr-product-icon {
+  font-size: 22px;
+}
+
+.cr-product-title {
+  font-weight: 700;
+  font-size: 14px;
+  color: #1a472a;
+}
+
+.cr-pack-list {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding-left: 30px;
+}
+
+.cr-pack-btn {
+  padding: 8px 14px;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  background: white;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 12px;
+  font-weight: 600;
+  color: #333;
+  font-family: inherit;
+}
+.cr-pack-btn:hover {
+  border-color: #4caf50;
+  background: #f0fdf4;
+}
+.cr-pack-btn.selected {
+  border-color: #4caf50;
+  background: #4caf50;
+  color: white;
+}
+
+/* ========== SELECTED INFO ========== */
+.cr-selected-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: #e8f5e9;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  font-size: 14px;
+}
+.cr-selected-info strong {
+  color: #1a472a;
+}
+
+/* ========== ENTRY TOTAL ========== */
+.cr-entry-total {
+  padding: 14px;
+  background: #f0fdf4;
+  border-radius: 10px;
+  text-align: center;
+  margin-bottom: 16px;
+  border: 1px solid #4caf50;
+}
+.cr-entry-total span {
+  display: block;
+  font-size: 11px;
+  color: #888;
+}
+.cr-entry-total strong {
+  font-size: 22px;
+  color: #1a472a;
+}
+
+/* ========== PAYMENT INFO ========== */
+.cr-pay-info {
+  padding: 14px;
+  background: #f9fafb;
+  border-radius: 10px;
+  margin-bottom: 16px;
+}
+.cr-pay-info h3 {
+  color: #1a472a;
+  margin-bottom: 4px;
+}
+.cr-pay-info p {
+  font-size: 12px;
+  color: #888;
+}
+
+.cr-pay-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 0;
+  border-bottom: 1px solid #e0e0e0;
+  font-size: 13px;
+}
+.cr-pay-row:last-child {
+  border-bottom: none;
+}
+
+.cr-pay-btns {
+  display: flex;
+  gap: 10px;
+  margin-top: 16px;
+}
+.cr-pay-btns button {
+  flex: 1;
+}
+
+/* ========== RESPONSIVE ========== */
+@media (max-width: 768px) {
+  .cr-container {
+    padding: 12px;
+  }
+
+  .cr-header {
+    padding: 16px;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .cr-header h1 {
+    font-size: 18px;
+  }
+
+  .cr-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .cr-ledger-summary {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+  }
+
+  .cr-summary-item {
+    padding: 10px;
+  }
+  .cr-summary-item strong {
+    font-size: 16px;
+  }
+
+  .cr-modal-box {
+    max-width: 100%;
+    margin: 0;
+    border-radius: 20px 20px 0 0;
+    max-height: 95vh;
+  }
+
+  .cr-row {
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .cr-ledger-header {
+    flex-direction: column;
+    text-align: center;
+  }
+
+  .cr-ledger-info {
+    flex-direction: column;
+    text-align: center;
+  }
+
+  .cr-ledger-actions {
+    flex-direction: column;
+  }
+
+  .cr-pack-list {
+    padding-left: 0;
+  }
+}
+
+@media (max-width: 400px) {
+  .cr-ledger-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .cr-product-list {
+    max-height: 200px;
+  }
+}
