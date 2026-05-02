@@ -1,5 +1,6 @@
 // src/pages/auth/Login.jsx
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../components/contexts/AuthContext';
 import { loginAdmin, loginDeliveryBoy, loginCustomer } from '../../api/auth';
 import './Login.css';
@@ -11,24 +12,19 @@ const Login = () => {
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const { isAdminUser, isDeliveryBoy, isCustomer, loading: authLoading } = useAuth();
+  const navigate = useNavigate();
 
   useEffect(() => {
     if (!authLoading) {
       if (isAdminUser) {
-        window.location.href = '/dashboard';
+        navigate('/dashboard', { replace: true });
       } else if (isDeliveryBoy) {
-        window.location.href = '/delivery/dashboard';
+        navigate('/delivery/dashboard', { replace: true });
       } else if (isCustomer) {
-        window.location.href = '/customer/dashboard';
+        navigate('/customer/dashboard', { replace: true });
       }
     }
-  }, [authLoading, isAdminUser, isDeliveryBoy, isCustomer]);
-
-  // ✅ Clear any autofilled values on mount
-  useEffect(() => {
-    setPhone('');
-    setPassword('');
-  }, []);
+  }, [authLoading, isAdminUser, isDeliveryBoy, isCustomer, navigate]);
 
   if (authLoading) {
     return (
@@ -67,6 +63,7 @@ const Login = () => {
       const result = await loginAdmin(phone, password);
       console.log('Admin login result:', result);
       if (result.success) {
+        // ✅ Force full page reload to refresh AuthContext
         window.location.href = '/dashboard';
         return;
       } else {
@@ -79,6 +76,7 @@ const Login = () => {
     const deliveryResult = await loginDeliveryBoy(phone, password);
     console.log('Delivery login result:', deliveryResult);
     if (deliveryResult.success) {
+      // ✅ Force full page reload to refresh AuthContext
       window.location.href = '/delivery/dashboard';
       return;
     }
@@ -86,12 +84,18 @@ const Login = () => {
     const customerResult = await loginCustomer(phone, password);
     console.log('Customer login result:', customerResult);
     if (customerResult.success) {
+      // ✅ Force full page reload to refresh AuthContext
       window.location.href = '/customer/dashboard';
       return;
     }
     
     setError(customerResult.error || 'Invalid phone number or password');
     setLoading(false);
+  };
+
+  const quickLogin = (phoneNum, pass) => {
+    setPhone(phoneNum);
+    setPassword(pass);
   };
 
   return (
@@ -125,8 +129,6 @@ const Login = () => {
               maxLength={10}
               className="login-input"
               autoFocus
-              autoComplete="off"  {/* ✅ Disable autofill */}
-              name="phone"  {/* ✅ Unique name to prevent browser autofill */}
             />
           </div>
           
@@ -139,8 +141,6 @@ const Login = () => {
               onChange={(e) => setPassword(e.target.value)} 
               required 
               className="login-input"
-              autoComplete="new-password"  {/* ✅ Prevents browser from autofilling saved password */}
-              name="password-new"  {/* ✅ Unique name */}
             />
             <button 
               type="button" 
