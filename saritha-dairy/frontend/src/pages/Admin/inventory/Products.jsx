@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import './Products.css';
 
 const API_URL = 'https://saritha-dairy-api.onrender.com/api';
+const BASE_URL = 'https://saritha-dairy-api.onrender.com';  // ✅ For images (no /api)
 
 const Products = () => {
   const [products, setProducts] = useState([]);
@@ -35,7 +36,6 @@ const Products = () => {
   const fetchProducts = async () => {
     setLoading(true);
     try {
-      // ✅ FIXED: Removed extra /api
       const response = await fetch(`${API_URL}/products`, {
         headers: {
           'Content-Type': 'application/json',
@@ -128,7 +128,6 @@ const Products = () => {
     }
 
     try {
-      // ✅ FIXED: Removed extra /api
       const url = editingProduct 
         ? `${API_URL}/products/${editingProduct.id}`
         : `${API_URL}/products`;
@@ -161,7 +160,6 @@ const Products = () => {
   const handleDelete = async (id, name) => {
     if (window.confirm(`Delete "${name}"?`)) {
       try {
-        // ✅ FIXED: Removed extra /api
         const response = await fetch(`${API_URL}/products/${id}`, {
           method: 'DELETE',
           headers: {
@@ -193,7 +191,8 @@ const Products = () => {
       name: product.name,
       packs: packs,
       image: null,
-      imagePreview: product.image_url ? `${API_URL}${product.image_url}` : ''
+      // ✅ FIXED: Use BASE_URL for images (no /api)
+      imagePreview: product.image_url ? `${BASE_URL}${product.image_url}` : ''
     });
     setShowAddModal(true);
   };
@@ -309,7 +308,8 @@ const Products = () => {
         }}>
           {filteredProducts.map(product => {
             const packs = formatPacks(product.packs);
-            const imageUrl = product.image_url ? `${API_URL}${product.image_url}` : null;
+            // ✅ FIXED: Use BASE_URL for images (no /api)
+            const imageUrl = product.image_url ? `${BASE_URL}${product.image_url}` : null;
             
             return (
               <div key={product.id} style={{
