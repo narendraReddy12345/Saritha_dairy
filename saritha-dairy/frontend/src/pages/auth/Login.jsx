@@ -125,8 +125,8 @@ const Login = () => {
               maxLength={10}
               className="login-input"
               autoFocus
-              autoComplete="off"  
-              name="phone"  
+              autoComplete="off"  {/* ✅ Disable autofill */}
+              name="phone"  {/* ✅ Unique name to prevent browser autofill */}
             />
           </div>
           
@@ -139,8 +139,8 @@ const Login = () => {
               onChange={(e) => setPassword(e.target.value)} 
               required 
               className="login-input"
-              autoComplete="new-password"  
-              name="password-new"  
+              autoComplete="new-password"  {/* ✅ Prevents browser from autofilling saved password */}
+              name="password-new"  {/* ✅ Unique name */}
             />
             <button 
               type="button" 
