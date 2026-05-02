@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import './CreditManagement.css';
 
-const API_URL = 'http://localhost:5000/api';
+const API_URL = 'https://saritha-dairy-api.onrender.com/api';
 
 // Helper to round to 2 decimal places
 const round2 = (num) => Math.round(parseFloat(num || 0) * 100) / 100;

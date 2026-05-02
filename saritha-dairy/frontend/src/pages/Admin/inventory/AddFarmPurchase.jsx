@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import './AddPurchase.css';
 
-const API_URL = 'http://localhost:5000/api';
+const API_URL = 'https://saritha-dairy-api.onrender.com/api';
 
 const AddPurchase = () => {
   const [loading, setLoading] = useState(false);

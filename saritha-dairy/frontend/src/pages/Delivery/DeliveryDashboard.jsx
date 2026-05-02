@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import './DeliveryDashboard.css';
 
-const API_URL = 'http://localhost:5000/api';
+const API_URL = 'https://saritha-dairy-api.onrender.com/api';
 
 const DeliveryDashboard = () => {
   const [customers, setCustomers] = useState([]);
