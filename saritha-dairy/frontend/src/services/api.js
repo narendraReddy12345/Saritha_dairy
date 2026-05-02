@@ -1,6 +1,6 @@
 // src/services/api.js
-const API_URL = 'http://localhost:5000/api';
 
+const API_URL = 'https://saritha-dairy-api.onrender.com';
 // ============ HELPER FUNCTION ============
 const handleResponse = async (response) => {
   try {
