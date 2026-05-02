@@ -1,5 +1,5 @@
 // src/api/auth.js
-const API_URL = 'https://saritha-dairy-api.onrender.com';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
 export const loginAdmin = async (phone, password) => {
   try {
