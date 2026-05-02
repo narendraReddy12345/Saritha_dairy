@@ -24,7 +24,7 @@ const Login = () => {
     }
   }, [authLoading, isAdminUser, isDeliveryBoy, isCustomer]);
 
-  // Clear any autofilled values on mount
+  // Clear inputs on mount
   useEffect(() => {
     setPhone('');
     setPassword('');
@@ -101,7 +101,7 @@ const Login = () => {
         {/* Logo & Brand */}
         <div className="login-brand">
           <img 
-            src="https://res.cloudinary.com/dzuixvh7w/image/upload/v1777714202/63d14490-2acb-4845-84ea-8136800f7fc0_fwrfpt.jpg" 
+            src="https://res.cloudinary.com/dzuixvh7w/image/upload/v1/NjNkMTQ0OTAtMmFjYi00ODQ1LTg0ZWEtODEzNjgwMGY3ZmMwX2Z3cmZwdA==" 
             alt="Saritha Dairy Logo" 
             className="login-logo-img"
           />
@@ -131,7 +131,7 @@ const Login = () => {
               className="login-input"
               autoFocus
               autoComplete="off"
-              name="phone"
+              name="phone-login"
             />
           </div>
           
@@ -145,7 +145,7 @@ const Login = () => {
               required 
               className="login-input"
               autoComplete="new-password"
-              name="password-new"
+              name="password-login"
             />
             <button 
               type="button" 
