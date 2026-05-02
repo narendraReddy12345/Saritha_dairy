@@ -1,5 +1,6 @@
 // src/pages/auth/Login.jsx
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../components/contexts/AuthContext';
 import { loginAdmin, loginDeliveryBoy, loginCustomer } from '../../api/auth';
 import './Login.css';
@@ -11,18 +12,19 @@ const Login = () => {
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const { isAdminUser, isDeliveryBoy, isCustomer, loading: authLoading } = useAuth();
+  const navigate = useNavigate();
 
   useEffect(() => {
     if (!authLoading) {
       if (isAdminUser) {
-        window.location.href = '/dashboard';
+        navigate('/dashboard', { replace: true });
       } else if (isDeliveryBoy) {
-        window.location.href = '/delivery/dashboard';
+        navigate('/delivery/dashboard', { replace: true });
       } else if (isCustomer) {
-        window.location.href = '/customer/dashboard';
+        navigate('/customer/dashboard', { replace: true });
       }
     }
-  }, [authLoading, isAdminUser, isDeliveryBoy, isCustomer]);
+  }, [authLoading, isAdminUser, isDeliveryBoy, isCustomer, navigate]);
 
   if (authLoading) {
     return (
@@ -59,8 +61,9 @@ const Login = () => {
     
     if (phone === ADMIN_PHONE) {
       const result = await loginAdmin(phone, password);
+      console.log('Admin login result:', result);
       if (result.success) {
-        window.location.href = '/dashboard';
+        navigate('/dashboard', { replace: true });
         return;
       } else {
         setError(result.error || 'Invalid admin credentials');
@@ -70,14 +73,16 @@ const Login = () => {
     }
     
     const deliveryResult = await loginDeliveryBoy(phone, password);
+    console.log('Delivery login result:', deliveryResult);
     if (deliveryResult.success) {
-      window.location.href = '/delivery/dashboard';
+      navigate('/delivery/dashboard', { replace: true });
       return;
     }
     
     const customerResult = await loginCustomer(phone, password);
+    console.log('Customer login result:', customerResult);
     if (customerResult.success) {
-      window.location.href = '/customer/dashboard';
+      navigate('/customer/dashboard', { replace: true });
       return;
     }
     
@@ -152,8 +157,6 @@ const Login = () => {
             )}
           </button>
         </form>
-
-        
 
         {/* Footer */}
         <div className="login-footer">
