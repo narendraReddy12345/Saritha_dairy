@@ -7,11 +7,17 @@ const pool = new Pool({
   host: process.env.DB_HOST || 'localhost',
   port: process.env.DB_PORT || 5432,
   database: process.env.DB_NAME || 'saritha_dairy',
+  ssl: process.env.DB_HOST && process.env.DB_HOST !== 'localhost' ? {
+    rejectUnauthorized: false
+  } : false
 });
 
 pool.connect((err) => {
-  if (err) console.log('❌ DB connection failed:', err.message);
-  else console.log('✅ DB connected');
+  if (err) {
+    console.error('❌ DB connection failed:', err.message);
+  } else {
+    console.log('✅ DB connected successfully');
+  }
 });
 
 const createAllTables = async () => {
@@ -44,13 +50,20 @@ const createAllTables = async () => {
     await client.query(`CREATE TABLE IF NOT EXISTS sale_items (id SERIAL PRIMARY KEY, sale_id INTEGER REFERENCES sales(id) ON DELETE CASCADE, product_name VARCHAR(200), pack_size_display VARCHAR(50), quantity INTEGER DEFAULT 1, price DECIMAL(10,2), total DECIMAL(10,2))`);
 
     await client.query('COMMIT');
-    console.log('✅ All tables created');
+    console.log('✅ All tables created successfully');
   } catch (error) {
     await client.query('ROLLBACK');
-    console.error('❌ Error:', error);
-  } finally { client.release(); }
+    console.error('❌ Error creating tables:', error.message);
+  } finally { 
+    client.release(); 
+  }
 };
 
-createAllTables();
+// Only run table creation after successful connection
+pool.connect((err) => {
+  if (!err) {
+    createAllTables();
+  }
+});
 
 module.exports = pool;
