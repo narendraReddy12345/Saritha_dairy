@@ -1,5 +1,5 @@
 // src/pages/Admin/CreditManagement/CreditManagement.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import './CreditManagement.css';
 
 const API_URL = 'https://saritha-dairy-api.onrender.com/api';
@@ -28,9 +28,23 @@ const CreditManagement = () => {
   const [showNewCustomer, setShowNewCustomer] = useState(false);
   const [newCustomer, setNewCustomer] = useState({ name: '', phone: '' });
 
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  const exportMenuRef = useRef(null);
+
   useEffect(() => {
     loadData();
     fetchProducts();
+  }, []);
+
+  // Close export menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (exportMenuRef.current && !exportMenuRef.current.contains(e.target)) {
+        setShowExportMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
   const getToken = () => sessionStorage.getItem('authToken');
@@ -68,7 +82,6 @@ const CreditManagement = () => {
     } catch (error) { console.error('Error:', error); }
   };
 
-  // ✅ Group entries by customer with proper rounding
   const groupByCustomer = (entries) => {
     const grouped = {};
     
@@ -112,7 +125,6 @@ const CreditManagement = () => {
     setEntry({ ...entry, productName, packSize, price: price || '' });
   };
 
-  // ✅ Save entry with proper rounding
   const saveEntry = async () => {
     if (!entry.productName || !entry.price) {
       showMsg('error', 'Please select a product');
@@ -169,7 +181,6 @@ const CreditManagement = () => {
     } catch (error) { console.error('Error:', error); }
   };
 
-  // ✅ FIXED: Record payment with proper rounding
   const recordPayment = async () => {
     const amount = round2(paymentAmount);
     
@@ -236,6 +247,226 @@ const CreditManagement = () => {
     showMsg('success', 'Customer created! Add entries below.');
   };
 
+  // ==================== EXPORT FUNCTIONS ====================
+
+  // Generate CSV content
+  const generateCSV = (data, filename) => {
+    let csv = '';
+    
+    if (selectedCustomer) {
+      // Single customer ledger export
+      csv = 'Date,Product,Quantity,Amount,Paid,Balance,Status\n';
+      let runningBalance = 0;
+      const sorted = [...customerLedger].sort((a, b) => 
+        new Date(a.created_at || a.date) - new Date(b.created_at || b.date)
+      );
+      sorted.forEach(entry => {
+        const amount = round2(entry.total_amount);
+        const paid = round2(entry.paid_amount);
+        runningBalance = round2(runningBalance + amount - paid);
+        const product = entry.items?.map(item => item.product).join('; ') || '';
+        const qty = entry.items?.[0]?.quantity || 1;
+        csv += `${new Date(entry.date || entry.created_at).toLocaleDateString('en-IN')},${product},${qty},${amount},${paid},${runningBalance},${entry.status}\n`;
+      });
+      // Add summary
+      csv += `\n,,,Total: ${round2(selectedCustomer.totalCredit)},Total: ${round2(selectedCustomer.totalPaid)},Balance: ${round2(selectedCustomer.totalBalance)},\n`;
+    } else {
+      // All customers summary export
+      csv = 'Customer Name,Phone,Entries,Total Credit,Total Paid,Balance,Status\n';
+      creditCustomers.forEach(c => {
+        const bal = round2(c.totalBalance);
+        const status = bal <= 0 ? 'Clear' : 'Pending';
+        csv += `"${c.customerName}",${c.phone},${c.entries.length},${round2(c.totalCredit)},${round2(c.totalPaid)},${bal},${status}\n`;
+      });
+    }
+
+    // Download CSV
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = filename;
+    link.click();
+    URL.revokeObjectURL(link.href);
+    
+    setShowExportMenu(false);
+    showMsg('success', '✅ Downloaded!');
+  };
+
+  // Generate PDF-like print (Using browser print as HTML table)
+  const generatePDF = () => {
+    let html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <title>Credit Report</title>
+        <style>
+          body { font-family: Arial, sans-serif; padding: 20px; color: #333; }
+          .header { text-align: center; margin-bottom: 20px; border-bottom: 2px solid #1a472a; padding-bottom: 10px; }
+          .header h1 { color: #1a472a; margin: 0; font-size: 20px; }
+          .header p { color: #666; margin: 5px 0 0; font-size: 12px; }
+          table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 12px; }
+          th { background: #1a472a; color: white; padding: 8px 10px; text-align: left; font-size: 11px; text-transform: uppercase; }
+          td { padding: 8px 10px; border-bottom: 1px solid #e0e0e0; }
+          tr:nth-child(even) { background: #f9fafb; }
+          .amount { text-align: right; font-weight: 600; }
+          .balance-positive { color: #e65100; font-weight: 700; }
+          .balance-zero { color: #2e7d32; font-weight: 700; }
+          .summary { background: #f0fdf4; padding: 12px; border-radius: 8px; margin-top: 20px; }
+          .summary h3 { margin: 0 0 10px; color: #1a472a; }
+          .summary-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+          .summary-item { text-align: center; }
+          .summary-item span { display: block; font-size: 11px; color: #666; }
+          .summary-item strong { display: block; font-size: 16px; margin-top: 4px; }
+          .badge { padding: 3px 8px; border-radius: 10px; font-size: 10px; font-weight: 600; }
+          .badge-settled { background: #e8f5e9; color: #2e7d32; }
+          .badge-partial { background: #fff3e0; color: #e65100; }
+          .badge-pending { background: #ffebee; color: #c62828; }
+          .footer { text-align: center; margin-top: 20px; font-size: 10px; color: #999; border-top: 1px solid #e0e0e0; padding-top: 10px; }
+          @media print { body { padding: 0; } }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1>🥛 Saritha Dairy - Credit Report</h1>
+          <p>Generated on ${new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })} at ${new Date().toLocaleTimeString('en-IN')}</p>
+        </div>
+    `;
+
+    if (selectedCustomer) {
+      // Single customer detailed report
+      html += `
+        <h2 style="color: #1a472a;">Customer: ${selectedCustomer.customerName}</h2>
+        <p style="color: #666;">📱 ${selectedCustomer.phone}</p>
+        
+        <table>
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Product</th>
+              <th>Qty</th>
+              <th>Amount (₹)</th>
+              <th>Paid (₹)</th>
+              <th>Balance (₹)</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+      `;
+
+      let runningBalance = 0;
+      const sorted = [...customerLedger].sort((a, b) => 
+        new Date(a.created_at || a.date) - new Date(b.created_at || b.date)
+      );
+      sorted.forEach(entry => {
+        const amount = round2(entry.total_amount);
+        const paid = round2(entry.paid_amount);
+        runningBalance = round2(runningBalance + amount - paid);
+        const statusClass = entry.status === 'settled' ? 'badge-settled' : entry.status === 'partial' ? 'badge-partial' : 'badge-pending';
+        const statusText = entry.status === 'settled' ? 'Paid' : entry.status === 'partial' ? 'Part' : 'Due';
+        
+        html += `
+          <tr>
+            <td>${new Date(entry.date || entry.created_at).toLocaleDateString('en-IN')}</td>
+            <td>${entry.items?.map(item => item.product).join(', ') || ''}</td>
+            <td>${entry.items?.[0]?.quantity || 1}</td>
+            <td class="amount">₹${amount.toLocaleString()}</td>
+            <td class="amount">${paid > 0 ? '₹' + paid.toLocaleString() : '-'}</td>
+            <td class="amount ${runningBalance > 0 ? 'balance-positive' : 'balance-zero'}">₹${runningBalance.toLocaleString()}</td>
+            <td><span class="badge ${statusClass}">${statusText}</span></td>
+          </tr>
+        `;
+      });
+
+      html += `
+          </tbody>
+        </table>
+        
+        <div class="summary">
+          <h3>Summary</h3>
+          <div class="summary-grid">
+            <div class="summary-item">
+              <span>Total Credit</span>
+              <strong>₹${round2(selectedCustomer.totalCredit).toLocaleString()}</strong>
+            </div>
+            <div class="summary-item">
+              <span>Total Paid</span>
+              <strong style="color:#2e7d32">₹${round2(selectedCustomer.totalPaid).toLocaleString()}</strong>
+            </div>
+            <div class="summary-item">
+              <span>Balance</span>
+              <strong style="color:${selectedCustomer.totalBalance > 0 ? '#e65100' : '#2e7d32'}">₹${round2(selectedCustomer.totalBalance).toLocaleString()}</strong>
+            </div>
+          </div>
+        </div>
+      `;
+    } else {
+      // All customers summary report
+      html += `
+        <h2 style="color: #1a472a;">All Customers Summary</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Customer Name</th>
+              <th>Phone</th>
+              <th>Entries</th>
+              <th>Total Credit (₹)</th>
+              <th>Total Paid (₹)</th>
+              <th>Balance (₹)</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+      `;
+
+      creditCustomers.forEach(c => {
+        const bal = round2(c.totalBalance);
+        const status = bal <= 0 ? 'Clear' : 'Pending';
+        const statusClass = bal <= 0 ? 'badge-settled' : 'badge-pending';
+        
+        html += `
+          <tr>
+            <td>${c.customerName}</td>
+            <td>${c.phone}</td>
+            <td>${c.entries.length}</td>
+            <td class="amount">₹${round2(c.totalCredit).toLocaleString()}</td>
+            <td class="amount">₹${round2(c.totalPaid).toLocaleString()}</td>
+            <td class="amount ${bal > 0 ? 'balance-positive' : 'balance-zero'}">₹${bal.toLocaleString()}</td>
+            <td><span class="badge ${statusClass}">${status}</span></td>
+          </tr>
+        `;
+      });
+
+      html += `
+          </tbody>
+        </table>
+      `;
+    }
+
+    html += `
+        <div class="footer">
+          <p>Saritha Dairy - JNTU, Hyderabad | 📞 9398263810</p>
+          <p>This is a computer-generated report.</p>
+        </div>
+      </body>
+      </html>
+    `;
+
+    // Open in new window and trigger print
+    const printWindow = window.open('', '_blank', 'width=900,height=700');
+    printWindow.document.write(html);
+    printWindow.document.close();
+    printWindow.focus();
+    
+    // Auto print after content loads
+    setTimeout(() => {
+      printWindow.print();
+    }, 500);
+    
+    setShowExportMenu(false);
+    showMsg('success', '📄 Opening print dialog...');
+  };
+
   const totalPending = round2(creditCustomers.reduce((s, c) => s + c.totalBalance, 0));
   const pendingCount = creditCustomers.filter(c => c.totalBalance > 0).length;
 
@@ -278,11 +509,65 @@ const CreditManagement = () => {
               <p>📱 {selectedCustomer.phone}</p>
             </div>
           </div>
-          <div className="cr-ledger-balance">
-            <span>{displayBalance > 0 ? 'Balance Due' : 'Status'}</span>
-            <strong style={{color: displayBalance > 0 ? '#e65100' : '#2e7d32'}}>
-              {displayBalance > 0 ? `₹${displayBalance.toLocaleString()}` : '✅ Clear'}
-            </strong>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            {/* Export Menu */}
+            <div ref={exportMenuRef} style={{ position: 'relative' }}>
+              <button 
+                className="cr-btn-outline" 
+                onClick={() => setShowExportMenu(!showExportMenu)}
+                style={{ padding: '8px 16px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px' }}
+              >
+                📥 Export
+              </button>
+              
+              {showExportMenu && (
+                <div style={{
+                  position: 'absolute', top: '100%', right: 0, marginTop: '6px',
+                  background: 'white', borderRadius: '12px', boxShadow: '0 8px 30px rgba(0,0,0,0.15)',
+                  minWidth: '180px', zIndex: 100, overflow: 'hidden', animation: 'dropdownIn 0.2s ease'
+                }}>
+                  <button 
+                    onClick={() => {
+                      const filename = `credit-report-${selectedCustomer.customerName.replace(/\s+/g, '-').toLowerCase()}-${new Date().toISOString().split('T')[0]}.csv`;
+                      generateCSV(null, filename);
+                    }}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: '10px', width: '100%',
+                      padding: '12px 16px', border: 'none', background: 'none', cursor: 'pointer',
+                      fontSize: '13px', color: '#333', textAlign: 'left',
+                      borderBottom: '1px solid #f0f0f0'
+                    }}
+                  >
+                    <span style={{ fontSize: '18px' }}>📊</span>
+                    <div>
+                      <div style={{ fontWeight: 600 }}>Excel / CSV</div>
+                      <div style={{ fontSize: '10px', color: '#888' }}>Download spreadsheet</div>
+                    </div>
+                  </button>
+                  <button 
+                    onClick={generatePDF}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: '10px', width: '100%',
+                      padding: '12px 16px', border: 'none', background: 'none', cursor: 'pointer',
+                      fontSize: '13px', color: '#333', textAlign: 'left'
+                    }}
+                  >
+                    <span style={{ fontSize: '18px' }}>📄</span>
+                    <div>
+                      <div style={{ fontWeight: 600 }}>PDF / Print</div>
+                      <div style={{ fontSize: '10px', color: '#888' }}>Print formatted report</div>
+                    </div>
+                  </button>
+                </div>
+              )}
+            </div>
+            
+            <div className="cr-ledger-balance">
+              <span>{displayBalance > 0 ? 'Balance Due' : 'Status'}</span>
+              <strong style={{color: displayBalance > 0 ? '#e65100' : '#2e7d32'}}>
+                {displayBalance > 0 ? `₹${displayBalance.toLocaleString()}` : '✅ Clear'}
+              </strong>
+            </div>
           </div>
         </div>
 
@@ -313,7 +598,7 @@ const CreditManagement = () => {
           )}
         </div>
 
-        {/* Ledger Table with Running Balance */}
+        {/* Rest of ledger table remains same */}
         <div className="cr-ledger-table-wrap">
           <table className="cr-ledger-table">
             <thead>
@@ -373,7 +658,7 @@ const CreditManagement = () => {
           </table>
         </div>
 
-        {/* Add Entry Modal */}
+        {/* Add Entry Modal - Same as before */}
         {showAddEntry && (
           <div className="cr-modal" onClick={() => setShowAddEntry(false)}>
             <div className="cr-modal-box" onClick={e => e.stopPropagation()}>
@@ -421,7 +706,7 @@ const CreditManagement = () => {
           </div>
         )}
 
-        {/* Payment Modal */}
+        {/* Payment Modal - Same as before */}
         {showPayment && (
           <div className="cr-modal" onClick={() => setShowPayment(false)}>
             <div className="cr-modal-box cr-modal-sm" onClick={e => e.stopPropagation()}>
@@ -457,6 +742,56 @@ const CreditManagement = () => {
           <p>{creditCustomers.length} customers • ₹{totalPending.toLocaleString()} pending</p>
         </div>
         <div style={{display:'flex', gap:'8px'}}>
+          <div ref={exportMenuRef} style={{ position: 'relative' }}>
+            <button 
+              className="cr-btn-outline" 
+              onClick={() => setShowExportMenu(!showExportMenu)}
+              style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+            >
+              📥 Export All
+            </button>
+            
+            {showExportMenu && (
+              <div style={{
+                position: 'absolute', top: '100%', right: 0, marginTop: '6px',
+                background: 'white', borderRadius: '12px', boxShadow: '0 8px 30px rgba(0,0,0,0.15)',
+                minWidth: '180px', zIndex: 100, overflow: 'hidden', animation: 'dropdownIn 0.2s ease'
+              }}>
+                <button 
+                  onClick={() => {
+                    const filename = `all-credit-customers-${new Date().toISOString().split('T')[0]}.csv`;
+                    generateCSV(null, filename);
+                  }}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '10px', width: '100%',
+                    padding: '12px 16px', border: 'none', background: 'none', cursor: 'pointer',
+                    fontSize: '13px', color: '#333', textAlign: 'left',
+                    borderBottom: '1px solid #f0f0f0'
+                  }}
+                >
+                  <span style={{ fontSize: '18px' }}>📊</span>
+                  <div>
+                    <div style={{ fontWeight: 600 }}>Excel / CSV</div>
+                    <div style={{ fontSize: '10px', color: '#888' }}>Download all customers</div>
+                  </div>
+                </button>
+                <button 
+                  onClick={generatePDF}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '10px', width: '100%',
+                    padding: '12px 16px', border: 'none', background: 'none', cursor: 'pointer',
+                    fontSize: '13px', color: '#333', textAlign: 'left'
+                  }}
+                >
+                  <span style={{ fontSize: '18px' }}>📄</span>
+                  <div>
+                    <div style={{ fontWeight: 600 }}>PDF / Print</div>
+                    <div style={{ fontSize: '10px', color: '#888' }}>Print formatted report</div>
+                  </div>
+                </button>
+              </div>
+            )}
+          </div>
           <button className="cr-btn-outline" onClick={() => setShowNewCustomer(true)}>+ New Customer</button>
         </div>
       </div>
