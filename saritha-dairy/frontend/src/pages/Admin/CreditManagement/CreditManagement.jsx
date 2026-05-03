@@ -561,9 +561,9 @@ const CreditManagement = () => {
     });
   };
 
-  // ==================== DIRECT WHATSAPP ====================
+  // ==================== ONE CLICK - IMAGE + TEXT TO CUSTOMER WHATSAPP ====================
 
-  const sendWhatsAppWithImage = async (customer) => {
+const sendWhatsAppWithImage = async (customer) => {
     let phoneNumber;
     let isAllCustomers = !customer.customerName;
     
@@ -582,76 +582,79 @@ const CreditManagement = () => {
     // Clean phone number
     phoneNumber = phoneNumber.replace(/\D/g, '');
     
-    // Create message
-    let message = '';
-    if (isAllCustomers) {
-      const totalP = round2(creditCustomers.reduce((s, c) => s + c.totalBalance, 0));
-      message = `📊 *SARITHA DAIRY - Pending Credits*\n\n`;
-      message += `📅 ${new Date().toLocaleDateString('en-IN')}\n`;
-      message += `💰 Total Pending: ₹${totalP.toLocaleString()}\n`;
-      message += `👥 Pending Customers: ${creditCustomers.filter(c => c.totalBalance > 0).length}\n\n`;
+    showMsg('success', '📱 Generating image...');
+    
+    try {
+      // Generate the statement image
+      const imageDataUrl = await generateReceiptImage(customer);
       
-      creditCustomers.filter(c => c.totalBalance > 0).slice(0, 10).forEach((c, i) => {
-        message += `${i+1}. ${c.customerName} - ₹${round2(c.totalBalance).toLocaleString()}\n`;
-        message += `   📱 ${c.phone}\n\n`;
-      });
-    } else {
-      message = `🧾 *SARITHA DAIRY - Credit Statement*\n\n`;
-      message += `👤 *${customer.customerName}*\n`;
-      message += `📱 ${customer.phone}\n`;
-      message += `📅 ${new Date().toLocaleDateString('en-IN')}\n\n`;
-      message += `──────────────────\n`;
-      message += `📊 *SUMMARY*\n`;
-      message += `──────────────────\n`;
-      message += `💰 Total Credit: ₹${round2(customer.totalCredit).toLocaleString()}\n`;
-      message += `✅ Total Paid: ₹${round2(customer.totalPaid).toLocaleString()}\n`;
+      // Convert to Blob
+      const response = await fetch(imageDataUrl);
+      const blob = await response.blob();
+      const file = new File([blob], 'Saritha_Dairy_Statement.png', { type: 'image/png' });
       
-      const bal = round2(customer.totalBalance);
-      if (bal > 0) {
-        message += `⚠️ *BALANCE DUE: ₹${bal.toLocaleString()}*\n`;
+      // Create caption
+      let caption = '';
+      if (isAllCustomers) {
+        caption = `📊 *SARITHA DAIRY*\nPending Credits Summary\n\n📅 ${new Date().toLocaleDateString('en-IN')}`;
       } else {
-        message += `✅ *ALL CLEAR - No Dues*\n`;
+        const bal = round2(customer.totalBalance);
+        caption = `🧾 *SARITHA DAIRY - Credit Statement*\n\n👤 ${customer.customerName}\n📅 ${new Date().toLocaleDateString('en-IN')}\n\n💰 Total: ₹${round2(customer.totalCredit).toLocaleString()}\n✅ Paid: ₹${round2(customer.totalPaid).toLocaleString()}\n${bal > 0 ? '⚠️ Due: ₹' + bal.toLocaleString() : '✅ All Clear'}`;
       }
       
-      if (customer.entries && customer.entries.length > 0) {
-        message += `\n──────────────────\n`;
-        message += `📋 *RECENT TRANSACTIONS*\n`;
-        message += `──────────────────\n`;
+      // ✅ TRY WEB SHARE API FIRST (SENDS IMAGE DIRECTLY TO WHATSAPP)
+      if (navigator.share && navigator.canShare) {
+        const shareData = {
+          title: 'Saritha Dairy Statement',
+          text: caption,
+          files: [file]
+        };
         
-        customer.entries.slice(0, 5).forEach((entry, i) => {
-          const product = entry.items?.map(item => item.product).join(', ') || '';
-          const date = new Date(entry.date || entry.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
-          message += `\n${i+1}. ${product}\n`;
-          message += `   📅 ${date} | 💰 ₹${round2(entry.total_amount).toLocaleString()}\n`;
-        });
+        if (navigator.canShare(shareData)) {
+          await navigator.share(shareData);
+          showMsg('success', '✅ Image sent to WhatsApp!');
+          setShowExportMenu(false);
+          return;
+        }
       }
+      
+      // ✅ FALLBACK: Download image + Open WhatsApp with text
+      // Download the image
+      const downloadLink = document.createElement('a');
+      downloadLink.href = imageDataUrl;
+      const filename = isAllCustomers 
+        ? `Saritha_Dairy_Summary_${new Date().toISOString().split('T')[0]}.png`
+        : `Saritha_Dairy_${customer.customerName?.replace(/\s+/g, '_')}.png`;
+      downloadLink.download = filename;
+      downloadLink.click();
+      
+      // Open WhatsApp directly
+      setTimeout(() => {
+        const waUrl = `https://wa.me/91${phoneNumber}?text=${encodeURIComponent(caption + '\n\n📎 Image downloaded - attach manually')}`;
+        window.open(waUrl, '_blank');
+      }, 300);
+      
+      showMsg('success', `📱 Image downloaded! Send it to ${customer.customerName || 'customer'}`);
+      
+    } catch (error) {
+      console.log('Error:', error);
+      
+      // Final fallback: Text only to WhatsApp
+      let msg = `🧾 *SARITHA DAIRY*\n\n`;
+      if (!isAllCustomers) {
+        msg += `Statement - ${customer.customerName}\n`;
+        msg += `💰 Total: ₹${round2(customer.totalCredit).toLocaleString()}\n`;
+        msg += `⚠️ Balance: ₹${round2(customer.totalBalance).toLocaleString()}\n`;
+      } else {
+        msg += `Total Pending: ₹${round2(creditCustomers.reduce((s, c) => s + c.totalBalance, 0)).toLocaleString()}\n`;
+      }
+      msg += `\n📍 JNTU, Hyderabad | 📞 9398263810`;
+      
+      window.open(`https://wa.me/91${phoneNumber}?text=${encodeURIComponent(msg)}`, '_blank');
+      showMsg('success', '📱 WhatsApp opened!');
     }
-    
-    message += `\n──────────────────\n`;
-    message += `📍 JNTU, Hyderabad\n`;
-    message += `📞 9398263810\n`;
-    message += `🥛 Pure by Nature, Trusted by Families`;
-    
-    // ✅ DIRECT WHATSAPP OPEN
-    const encodedMessage = encodeURIComponent(message);
-    const whatsappUrl = `https://wa.me/91${phoneNumber}?text=${encodedMessage}`;
-    
-    window.open(whatsappUrl, '_blank');
     
     setShowExportMenu(false);
-    showMsg('success', `📱 Opening WhatsApp for ${customer.customerName || 'Summary'}...`);
-  };
-
-  // ==================== DIRECT WHATSAPP CHAT ====================
-
-  const openWhatsAppChat = (customer) => {
-    const phone = customer.phone?.replace(/\D/g, '') || '';
-    if (phone.length === 10) {
-      const msg = encodeURIComponent(`Hello ${customer.customerName}, your credit statement from Saritha Dairy 🥛`);
-      window.open(`https://wa.me/91${phone}?text=${msg}`, '_blank');
-    } else {
-      showMsg('error', 'Invalid phone number');
-    }
   };
 
   // ==================== DOWNLOAD REPORT ====================
