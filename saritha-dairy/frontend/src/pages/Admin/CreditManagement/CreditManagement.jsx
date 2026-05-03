@@ -30,13 +30,13 @@ const CreditManagement = () => {
 
   const [showExportMenu, setShowExportMenu] = useState(false);
   const exportMenuRef = useRef(null);
+  const canvasRef = useRef(null);
 
   useEffect(() => {
     loadData();
     fetchProducts();
   }, []);
 
-  // Close export menu when clicking outside
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (exportMenuRef.current && !exportMenuRef.current.contains(e.target)) {
@@ -247,292 +247,299 @@ const CreditManagement = () => {
     showMsg('success', 'Customer created! Add entries below.');
   };
 
-  // ==================== WHATSAPP FUNCTION ====================
+  // ==================== GENERATE CANVAS RECEIPT IMAGE ====================
   
-  const sendWhatsApp = (customer) => {
-    const phone = customer.phone || customer.customerName;
-    let message = '';
-    
-    if (customer.customerName && customer.entries) {
-      // Send individual customer ledger
-      const bal = round2(customer.totalBalance);
-      message = `🧾 *SARITHA DAIRY - Credit Statement*\n\n`;
-      message += `👤 *Customer:* ${customer.customerName}\n`;
-      message += `📱 *Phone:* ${customer.phone}\n`;
-      message += `📅 *Date:* ${new Date().toLocaleDateString('en-IN')}\n\n`;
-      message += `──────────────────────\n`;
-      message += `📊 *SUMMARY*\n`;
-      message += `──────────────────────\n`;
-      message += `💰 Total Credit: ₹${round2(customer.totalCredit).toLocaleString()}\n`;
-      message += `✅ Total Paid: ₹${round2(customer.totalPaid).toLocaleString()}\n`;
-      message += `${bal > 0 ? '⚠️' : '✅'} *Balance: ₹${bal.toLocaleString()}*\n\n`;
+  const generateReceiptImage = (customer) => {
+    return new Promise((resolve) => {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
       
-      if (customer.entries.length > 0) {
-        message += `──────────────────────\n`;
-        message += `📋 *RECENT TRANSACTIONS*\n`;
-        message += `──────────────────────\n`;
+      const width = 600;
+      const padding = 25;
+      let y = 20;
+      
+      // Calculate height based on content
+      const entries = customer.entries || customerLedger || [];
+      const lineHeight = 22;
+      const headerHeight = 120;
+      const summaryHeight = 80;
+      const entryHeight = entries.length * 28;
+      const footerHeight = 80;
+      const height = headerHeight + summaryHeight + entryHeight + footerHeight + 100;
+      
+      canvas.width = width;
+      canvas.height = Math.max(height, 400);
+      
+      // Background
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, width, canvas.height);
+      
+      // Top gradient bar
+      const gradient = ctx.createLinearGradient(0, 0, width, 0);
+      gradient.addColorStop(0, '#1a472a');
+      gradient.addColorStop(1, '#2d6a4f');
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, width, 8);
+      
+      // Header
+      ctx.fillStyle = '#1a472a';
+      ctx.font = 'bold 22px Arial';
+      ctx.textAlign = 'center';
+      y = 40;
+      ctx.fillText('🥛 SARITHA DAIRY', width / 2, y);
+      
+      ctx.fillStyle = '#666';
+      ctx.font = '12px Arial';
+      y += 18;
+      ctx.fillText('Credit Statement', width / 2, y);
+      
+      y += 20;
+      ctx.strokeStyle = '#e0e0e0';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(padding, y);
+      ctx.lineTo(width - padding, y);
+      ctx.stroke();
+      
+      // Customer Info
+      y += 20;
+      ctx.fillStyle = '#333';
+      ctx.font = 'bold 14px Arial';
+      ctx.textAlign = 'left';
+      
+      if (customer.customerName) {
+        ctx.fillText(`Customer: ${customer.customerName}`, padding, y);
+        y += 18;
+        ctx.font = '12px Arial';
+        ctx.fillStyle = '#666';
+        ctx.fillText(`Phone: ${customer.phone}`, padding, y);
+        y += 18;
+        ctx.fillText(`Date: ${new Date().toLocaleDateString('en-IN')}`, padding, y);
+      } else {
+        ctx.fillText('All Customers Summary', padding, y);
+        y += 18;
+        ctx.font = '12px Arial';
+        ctx.fillStyle = '#666';
+        ctx.fillText(`Date: ${new Date().toLocaleDateString('en-IN')}`, padding, y);
+      }
+      
+      // Summary Box
+      y += 25;
+      const boxY = y;
+      ctx.fillStyle = '#f0fdf4';
+      ctx.strokeStyle = '#c8e6c9';
+      ctx.lineWidth = 2;
+      roundRect(ctx, padding, y, width - (padding * 2), 65, 8);
+      ctx.fill();
+      ctx.stroke();
+      
+      ctx.fillStyle = '#1a472a';
+      ctx.font = 'bold 12px Arial';
+      y += 18;
+      ctx.fillText('SUMMARY', padding + 10, y);
+      
+      const totalCredit = customer.totalCredit || round2(creditCustomers.reduce((s, c) => s + c.totalCredit, 0));
+      const totalPaid = customer.totalPaid || 0;
+      const totalBalance = customer.totalBalance || round2(creditCustomers.reduce((s, c) => s + c.totalBalance, 0));
+      
+      ctx.font = '11px Arial';
+      const col1 = padding + 10;
+      const col2 = width / 2 - 20;
+      const col3 = width - padding - 10;
+      
+      y += 16;
+      ctx.fillStyle = '#333';
+      ctx.fillText('Total Credit:', col1, y);
+      ctx.fillStyle = '#1a472a';
+      ctx.font = 'bold 11px Arial';
+      ctx.textAlign = 'right';
+      ctx.fillText(`₹${round2(totalCredit).toLocaleString()}`, col2, y);
+      
+      ctx.fillStyle = '#2e7d32';
+      ctx.fillText('Paid:', col2 + 80, y);
+      ctx.fillText(`₹${round2(totalPaid).toLocaleString()}`, col3, y);
+      
+      y += 16;
+      ctx.fillStyle = '#333';
+      ctx.font = '11px Arial';
+      ctx.textAlign = 'left';
+      ctx.fillText('Balance:', col1, y);
+      ctx.font = 'bold 12px Arial';
+      ctx.fillStyle = totalBalance > 0 ? '#e65100' : '#2e7d32';
+      ctx.textAlign = 'right';
+      ctx.fillText(`₹${round2(totalBalance).toLocaleString()}`, col3, y);
+      
+      // Transactions
+      y = boxY + 75;
+      if (entries.length > 0) {
+        ctx.fillStyle = '#1a472a';
+        ctx.font = 'bold 12px Arial';
+        ctx.textAlign = 'left';
+        ctx.fillText('RECENT TRANSACTIONS', padding, y);
+        y += 5;
         
-        const recentEntries = customer.entries.slice(0, 5);
-        recentEntries.forEach((entry, index) => {
+        // Table header
+        y += 15;
+        ctx.fillStyle = '#1a472a';
+        ctx.fillRect(padding, y, width - (padding * 2), 22);
+        ctx.fillStyle = 'white';
+        ctx.font = 'bold 10px Arial';
+        ctx.fillText('Date', padding + 8, y + 15);
+        ctx.fillText('Product', padding + 100, y + 15);
+        ctx.fillText('Qty', width / 2 + 40, y + 15);
+        ctx.textAlign = 'right';
+        ctx.fillText('Amount', width - padding - 8, y + 15);
+        
+        y += 22;
+        ctx.textAlign = 'left';
+        
+        const sorted = [...entries].sort((a, b) => new Date(b.created_at || b.date) - new Date(a.created_at || a.date));
+        const showEntries = sorted.slice(0, 8);
+        
+        showEntries.forEach((entry, index) => {
+          const bgColor = index % 2 === 0 ? '#ffffff' : '#f9fafb';
+          ctx.fillStyle = bgColor;
+          ctx.fillRect(padding, y, width - (padding * 2), 24);
+          
+          ctx.fillStyle = '#333';
+          ctx.font = '10px Arial';
+          ctx.fillText(new Date(entry.date || entry.created_at).toLocaleDateString('en-IN'), padding + 8, y + 16);
+          
           const product = entry.items?.map(item => item.product).join(', ') || '';
-          const amount = round2(entry.total_amount);
-          const paid = round2(entry.paid_amount);
-          message += `\n${index + 1}. ${product}\n`;
-          message += `   📅 ${new Date(entry.date || entry.created_at).toLocaleDateString('en-IN')}\n`;
-          message += `   💰 Amount: ₹${amount.toLocaleString()}\n`;
+          ctx.fillText(product.substring(0, 20), padding + 100, y + 16);
+          
+          ctx.textAlign = 'center';
+          ctx.fillText(entry.items?.[0]?.quantity || '1', width / 2 + 45, y + 16);
+          
+          ctx.textAlign = 'right';
+          ctx.font = 'bold 10px Arial';
+          ctx.fillStyle = '#1a472a';
+          ctx.fillText(`₹${round2(entry.total_amount).toLocaleString()}`, width - padding - 8, y + 16);
+          
+          ctx.textAlign = 'left';
+          y += 24;
         });
         
-        if (customer.entries.length > 5) {
-          message += `\n_...and ${customer.entries.length - 5} more entries_\n`;
+        if (entries.length > 8) {
+          ctx.fillStyle = '#888';
+          ctx.font = 'italic 10px Arial';
+          ctx.textAlign = 'center';
+          ctx.fillText(`...and ${entries.length - 8} more entries`, width / 2, y + 10);
         }
       }
       
-    } else {
-      // Send all pending customers summary
-      message = `🧾 *SARITHA DAIRY - Credit Summary*\n\n`;
-      message += `📅 *Date:* ${new Date().toLocaleDateString('en-IN')}\n\n`;
-      message += `──────────────────────\n`;
-      message += `📊 *PENDING CREDITS*\n`;
-      message += `──────────────────────\n`;
-      message += `👥 Customers: ${creditCustomers.filter(c => c.totalBalance > 0).length}\n`;
-      message += `💰 Total Pending: ₹${round2(creditCustomers.reduce((s, c) => s + c.totalBalance, 0)).toLocaleString()}\n\n`;
+      // Footer
+      y = canvas.height - 60;
+      ctx.strokeStyle = '#e0e0e0';
+      ctx.beginPath();
+      ctx.moveTo(padding, y);
+      ctx.lineTo(width - padding, y);
+      ctx.stroke();
       
-      const pendingCustomers = creditCustomers.filter(c => c.totalBalance > 0);
-      if (pendingCustomers.length > 0) {
-        message += `📋 *PENDING LIST:*\n\n`;
-        pendingCustomers.slice(0, 10).forEach((c, index) => {
-          message += `${index + 1}. ${c.customerName}\n`;
-          message += `   📱 ${c.phone}\n`;
-          message += `   ⚠️ Due: ₹${round2(c.totalBalance).toLocaleString()}\n\n`;
-        });
-        
-        if (pendingCustomers.length > 10) {
-          message += `_...and ${pendingCustomers.length - 10} more_\n`;
-        }
-      }
-    }
-    
-    message += `\n──────────────────────\n`;
-    message += `📍 *Saritha Dairy, JNTU, Hyderabad*\n`;
-    message += `📞 *Contact: 9398263810*\n`;
-    
-    // Encode message for WhatsApp URL
-    const encodedMessage = encodeURIComponent(message);
-    const phoneNumber = customer.phone || '9398263810';
-    const whatsappUrl = `https://wa.me/91${phoneNumber}?text=${encodedMessage}`;
-    
-    // Open WhatsApp
-    window.open(whatsappUrl, '_blank');
-    setShowExportMenu(false);
-    showMsg('success', '📱 Opening WhatsApp...');
+      y += 20;
+      ctx.fillStyle = '#666';
+      ctx.font = '11px Arial';
+      ctx.textAlign = 'center';
+      ctx.fillText('Saritha Dairy - JNTU, Hyderabad', width / 2, y);
+      y += 16;
+      ctx.fillText('📞 9398263810 | Pure by Nature, Trusted by Families', width / 2, y);
+      
+      resolve(canvas.toDataURL('image/png'));
+    });
   };
 
-  // ==================== PDF DOWNLOAD FUNCTION ====================
+  // Helper: Rounded rectangle
+  const roundRect = (ctx, x, y, w, h, r) => {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    ctx.lineTo(x + r, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
+  };
 
-  const downloadPDF = () => {
-    let html = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta charset="utf-8">
-        <title>Credit Report</title>
-        <style>
-          @import url('https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;600;700&display=swap');
-          * { box-sizing: border-box; margin: 0; padding: 0; }
-          body { font-family: 'Noto Sans', sans-serif; padding: 30px; color: #1a1a1a; background: white; }
-          .header { text-align: center; margin-bottom: 25px; border-bottom: 3px solid #1a472a; padding-bottom: 15px; }
-          .header .logo { font-size: 32px; margin-bottom: 5px; }
-          .header h1 { color: #1a472a; margin: 0; font-size: 22px; font-weight: 700; }
-          .header p { color: #666; margin: 4px 0 0; font-size: 12px; }
-          .customer-info { background: #f0fdf4; padding: 15px; border-radius: 10px; margin-bottom: 20px; border-left: 4px solid #1a472a; }
-          .customer-info h2 { color: #1a472a; margin: 0; font-size: 18px; }
-          .customer-info p { color: #666; margin: 5px 0 0; font-size: 13px; }
-          table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 12px; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-          th { background: #1a472a; color: white; padding: 10px 12px; text-align: left; font-size: 11px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px; }
-          td { padding: 10px 12px; border-bottom: 1px solid #e5e7eb; }
-          tr:nth-child(even) { background: #f9fafb; }
-          tr:last-child td { border-bottom: none; }
-          .amount { text-align: right; font-weight: 600; font-family: monospace; }
-          .balance-positive { color: #e65100; font-weight: 700; }
-          .balance-zero { color: #2e7d32; font-weight: 700; }
-          .summary { background: linear-gradient(135deg, #f0fdf4, #e8f5e9); padding: 16px; border-radius: 10px; margin-top: 20px; border: 2px solid #c8e6c9; }
-          .summary h3 { margin: 0 0 12px; color: #1a472a; font-size: 15px; }
-          .summary-grid { display: flex; gap: 15px; }
-          .summary-item { flex: 1; text-align: center; background: white; padding: 12px; border-radius: 8px; border: 1px solid #e5e7eb; }
-          .summary-item span { display: block; font-size: 10px; color: #888; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
-          .summary-item strong { display: block; font-size: 18px; }
-          .badge { padding: 4px 10px; border-radius: 20px; font-size: 10px; font-weight: 700; display: inline-block; }
-          .badge-settled { background: #e8f5e9; color: #2e7d32; }
-          .badge-partial { background: #fff3e0; color: #e65100; }
-          .badge-pending { background: #ffebee; color: #c62828; }
-          .footer { text-align: center; margin-top: 25px; padding-top: 15px; border-top: 1px solid #e5e7eb; font-size: 11px; color: #999; }
-          .footer p { margin: 2px 0; }
-          @media print { body { padding: 15px; } }
-        </style>
-      </head>
-      <body>
-        <div class="header">
-          <div class="logo">🥛</div>
-          <h1>SARITHA DAIRY</h1>
-          <p>Credit Report - Generated on ${new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })} at ${new Date().toLocaleTimeString('en-IN')}</p>
-        </div>
-    `;
-
-    if (selectedCustomer) {
-      // Single customer detailed report
-      html += `
-        <div class="customer-info">
-          <h2>${selectedCustomer.customerName}</h2>
-          <p>📱 ${selectedCustomer.phone}</p>
-        </div>
-        
-        <table>
-          <thead>
-            <tr>
-              <th>Date</th>
-              <th>Product</th>
-              <th>Qty</th>
-              <th>Amount (₹)</th>
-              <th>Paid (₹)</th>
-              <th>Balance (₹)</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody>
-      `;
-
-      let runningBalance = 0;
-      const sorted = [...customerLedger].sort((a, b) => 
-        new Date(a.created_at || a.date) - new Date(b.created_at || b.date)
-      );
-      sorted.forEach(entry => {
-        const amount = round2(entry.total_amount);
-        const paid = round2(entry.paid_amount);
-        runningBalance = round2(runningBalance + amount - paid);
-        const statusClass = entry.status === 'settled' ? 'badge-settled' : entry.status === 'partial' ? 'badge-partial' : 'badge-pending';
-        const statusText = entry.status === 'settled' ? 'Paid' : entry.status === 'partial' ? 'Part' : 'Due';
-        
-        html += `
-          <tr>
-            <td>${new Date(entry.date || entry.created_at).toLocaleDateString('en-IN')}</td>
-            <td>${entry.items?.map(item => item.product).join(', ') || '-'}</td>
-            <td>${entry.items?.[0]?.quantity || 1}</td>
-            <td class="amount">₹${amount.toLocaleString()}</td>
-            <td class="amount">${paid > 0 ? '₹' + paid.toLocaleString() : '-'}</td>
-            <td class="amount ${runningBalance > 0 ? 'balance-positive' : 'balance-zero'}">₹${runningBalance.toLocaleString()}</td>
-            <td><span class="badge ${statusClass}">${statusText}</span></td>
-          </tr>
-        `;
-      });
-
-      html += `
-          </tbody>
-        </table>
-        
-        <div class="summary">
-          <h3>📊 Account Summary</h3>
-          <div class="summary-grid">
-            <div class="summary-item">
-              <span>Total Credit</span>
-              <strong>₹${round2(selectedCustomer.totalCredit).toLocaleString()}</strong>
-            </div>
-            <div class="summary-item">
-              <span>Total Paid</span>
-              <strong style="color:#2e7d32">₹${round2(selectedCustomer.totalPaid).toLocaleString()}</strong>
-            </div>
-            <div class="summary-item">
-              <span>Balance</span>
-              <strong style="color:${selectedCustomer.totalBalance > 0 ? '#e65100' : '#2e7d32'}">₹${round2(selectedCustomer.totalBalance).toLocaleString()}</strong>
-            </div>
-          </div>
-        </div>
-      `;
-    } else {
-      // All customers summary report
-      html += `
-        <h2 style="color: #1a472a; margin-bottom: 15px;">📋 All Customers Credit Summary</h2>
-        <table>
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>Customer Name</th>
-              <th>Phone</th>
-              <th>Entries</th>
-              <th>Total Credit (₹)</th>
-              <th>Total Paid (₹)</th>
-              <th>Balance (₹)</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody>
-      `;
-
-      creditCustomers.forEach((c, index) => {
-        const bal = round2(c.totalBalance);
-        const status = bal <= 0 ? 'Clear' : 'Pending';
-        const statusClass = bal <= 0 ? 'badge-settled' : 'badge-pending';
-        
-        html += `
-          <tr>
-            <td>${index + 1}</td>
-            <td><strong>${c.customerName}</strong></td>
-            <td>${c.phone}</td>
-            <td>${c.entries.length}</td>
-            <td class="amount">₹${round2(c.totalCredit).toLocaleString()}</td>
-            <td class="amount">₹${round2(c.totalPaid).toLocaleString()}</td>
-            <td class="amount ${bal > 0 ? 'balance-positive' : 'balance-zero'}">₹${bal.toLocaleString()}</td>
-            <td><span class="badge ${statusClass}">${status}</span></td>
-          </tr>
-        `;
-      });
-
-      html += `
-          </tbody>
-        </table>
-        
-        <div class="summary" style="margin-top: 20px;">
-          <h3>📊 Overall Summary</h3>
-          <div class="summary-grid">
-            <div class="summary-item">
-              <span>Total Customers</span>
-              <strong>${creditCustomers.length}</strong>
-            </div>
-            <div class="summary-item">
-              <span>Total Pending</span>
-              <strong style="color:#e65100">₹${round2(creditCustomers.reduce((s, c) => s + c.totalBalance, 0)).toLocaleString()}</strong>
-            </div>
-            <div class="summary-item">
-              <span>Pending Count</span>
-              <strong style="color:#e65100">${creditCustomers.filter(c => c.totalBalance > 0).length}</strong>
-            </div>
-          </div>
-        </div>
-      `;
+  // ==================== SEND PDF-LIKE IMAGE VIA WHATSAPP ====================
+  
+  const sendWhatsAppWithImage = async (customer) => {
+    showMsg('success', '📱 Generating...');
+    
+    try {
+      const imageDataUrl = await generateReceiptImage(customer);
+      
+      // Convert data URL to Blob
+      const response = await fetch(imageDataUrl);
+      const blob = await response.blob();
+      const file = new File([blob], 'credit-statement.png', { type: 'image/png' });
+      
+      // Create message text
+      const phone = customer.phone || '9398263810';
+      let caption = `🧾 *SARITHA DAIRY - Credit Statement*\n\n`;
+      caption += `📅 ${new Date().toLocaleDateString('en-IN')}\n`;
+      
+      if (customer.customerName) {
+        caption += `👤 ${customer.customerName}\n`;
+      }
+      caption += `\n📄 *Full statement attached as image*\n`;
+      caption += `📍 JNTU, Hyderabad | 📞 9398263810`;
+      
+      // Try Web Share API first (mobile)
+      if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          title: 'Credit Statement',
+          text: caption,
+          files: [file]
+        });
+        showMsg('success', '✅ Shared!');
+      } else {
+        // Fallback: Open WhatsApp with caption only
+        const encodedMessage = encodeURIComponent(caption);
+        const whatsappUrl = `https://wa.me/91${phone}?text=${encodedMessage}`;
+        window.open(whatsappUrl, '_blank');
+        showMsg('success', '📱 Opening WhatsApp...');
+      }
+    } catch (error) {
+      console.log('Share error:', error);
+      // Fallback to text-only WhatsApp
+      const phone = customer.phone || '9398263810';
+      let message = `🧾 *SARITHA DAIRY - Credit Statement*\n\n`;
+      message += `📅 ${new Date().toLocaleDateString('en-IN')}\n`;
+      if (customer.customerName) {
+        message += `👤 ${customer.customerName}\n`;
+        message += `📱 ${customer.phone}\n\n`;
+        message += `💰 Total: ₹${round2(customer.totalCredit).toLocaleString()}\n`;
+        message += `✅ Paid: ₹${round2(customer.totalPaid).toLocaleString()}\n`;
+        message += `⚠️ Balance: ₹${round2(customer.totalBalance).toLocaleString()}\n`;
+      }
+      message += `\n📍 JNTU, Hyderabad | 📞 9398263810`;
+      
+      window.open(`https://wa.me/91${phone}?text=${encodeURIComponent(message)}`, '_blank');
+      showMsg('success', '📱 Text sent to WhatsApp');
     }
-
-    html += `
-        <div class="footer">
-          <p><strong>Saritha Dairy</strong> - JNTU, Hyderabad</p>
-          <p>📞 9398263810 | 📧 sarithadairy@gmail.com</p>
-          <p style="margin-top: 5px;">This is a computer-generated report.</p>
-        </div>
-      </body>
-      </html>
-    `;
-
-    // Trigger download
-    const blob = new Blob([html], { type: 'text/html' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    const filename = selectedCustomer 
-      ? `credit-report-${selectedCustomer.customerName.replace(/\s+/g, '-').toLowerCase()}.html`
-      : `all-credit-customers-${new Date().toISOString().split('T')[0]}.html`;
-    link.download = filename;
-    link.click();
-    URL.revokeObjectURL(link.href);
     
     setShowExportMenu(false);
-    showMsg('success', '📄 Report downloaded!');
+  };
+
+  // ==================== DOWNLOAD REPORT ====================
+  
+  const downloadReport = async () => {
+    const customer = selectedCustomer || {};
+    const imageDataUrl = await generateReceiptImage(customer);
+    
+    const link = document.createElement('a');
+    link.href = imageDataUrl;
+    const filename = selectedCustomer 
+      ? `credit-statement-${selectedCustomer.customerName.replace(/\s+/g, '-').toLowerCase()}.png`
+      : `all-credit-summary-${new Date().toISOString().split('T')[0]}.png`;
+    link.download = filename;
+    link.click();
+    
+    setShowExportMenu(false);
+    showMsg('success', '📄 Downloaded!');
   };
 
   const totalPending = round2(creditCustomers.reduce((s, c) => s + c.totalBalance, 0));
@@ -578,36 +585,35 @@ const CreditManagement = () => {
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            {/* Export Dropdown */}
             <div ref={exportMenuRef} style={{ position: 'relative' }}>
               <button 
                 className="cr-btn-outline" 
                 onClick={() => setShowExportMenu(!showExportMenu)}
                 style={{ padding: '8px 16px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px' }}
               >
-                📤 Actions
+                📤 Share / Download
               </button>
               
               {showExportMenu && (
                 <div className="cr-export-dropdown">
                   <button 
-                    onClick={() => sendWhatsApp(selectedCustomer)}
+                    onClick={() => sendWhatsAppWithImage(selectedCustomer)}
                     className="cr-export-item"
                   >
                     <span className="cr-export-icon">💬</span>
                     <div>
-                      <div className="cr-export-title">Send on WhatsApp</div>
-                      <div className="cr-export-subtitle">Send ledger directly</div>
+                      <div className="cr-export-title">WhatsApp as Image</div>
+                      <div className="cr-export-subtitle">Send statement as image</div>
                     </div>
                   </button>
                   <button 
-                    onClick={downloadPDF}
+                    onClick={downloadReport}
                     className="cr-export-item"
                   >
-                    <span className="cr-export-icon">📄</span>
+                    <span className="cr-export-icon">📥</span>
                     <div>
-                      <div className="cr-export-title">Download Report</div>
-                      <div className="cr-export-subtitle">Save as HTML file</div>
+                      <div className="cr-export-title">Download Statement</div>
+                      <div className="cr-export-subtitle">Save as PNG image</div>
                     </div>
                   </button>
                 </div>
@@ -800,29 +806,29 @@ const CreditManagement = () => {
               onClick={() => setShowExportMenu(!showExportMenu)}
               style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
             >
-              📤 Actions
+              📤 Share / Download
             </button>
             
             {showExportMenu && (
               <div className="cr-export-dropdown">
                 <button 
-                  onClick={() => sendWhatsApp({})}
+                  onClick={() => sendWhatsAppWithImage({})}
                   className="cr-export-item"
                 >
                   <span className="cr-export-icon">💬</span>
                   <div>
-                    <div className="cr-export-title">Send on WhatsApp</div>
-                    <div className="cr-export-subtitle">Pending summary</div>
+                    <div className="cr-export-title">WhatsApp as Image</div>
+                    <div className="cr-export-subtitle">Send summary as image</div>
                   </div>
                 </button>
                 <button 
-                  onClick={downloadPDF}
+                  onClick={downloadReport}
                   className="cr-export-item"
                 >
-                  <span className="cr-export-icon">📄</span>
+                  <span className="cr-export-icon">📥</span>
                   <div>
                     <div className="cr-export-title">Download Report</div>
-                    <div className="cr-export-subtitle">All customers</div>
+                    <div className="cr-export-subtitle">Save as PNG image</div>
                   </div>
                 </button>
               </div>
