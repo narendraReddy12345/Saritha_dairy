@@ -249,51 +249,55 @@ const CreditManagement = () => {
 
   // ==================== GENERATE CANVAS RECEIPT IMAGE ====================
   
-  const generateReceiptImage = (customer) => {
+  // ==================== GENERATE SIMPLE RECEIPT IMAGE ====================
+
+const generateReceiptImage = (customer) => {
     return new Promise((resolve) => {
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
       
-      const width = 600;
-      const padding = 25;
-      let y = 20;
+      const width = 500;
+      const padding = 30;
+      let y = 0;
       
-      // Calculate height based on content
       const entries = customer.entries || customerLedger || [];
-      const lineHeight = 22;
-      const headerHeight = 120;
-      const summaryHeight = 80;
-      const entryHeight = entries.length * 28;
-      const footerHeight = 80;
-      const height = headerHeight + summaryHeight + entryHeight + footerHeight + 100;
+      const isAllCustomers = !customer.customerName;
+      
+      // Calculate height
+      let height = 350; // Base height
+      if (isAllCustomers) {
+        const pendingList = creditCustomers.filter(c => c.totalBalance > 0);
+        height = 300 + (pendingList.length * 50) + 80;
+      } else {
+        height = 350 + (Math.min(entries.length, 8) * 40) + 80;
+      }
       
       canvas.width = width;
       canvas.height = Math.max(height, 400);
       
-      // Background
+      // White background
       ctx.fillStyle = '#ffffff';
-      ctx.fillRect(0, 0, width, canvas.height);
+      ctx.fillRect(0, 0, width, height);
       
-      // Top gradient bar
-      const gradient = ctx.createLinearGradient(0, 0, width, 0);
-      gradient.addColorStop(0, '#1a472a');
-      gradient.addColorStop(1, '#2d6a4f');
-      ctx.fillStyle = gradient;
-      ctx.fillRect(0, 0, width, 8);
+      // ===== GREEN TOP BAR =====
+      ctx.fillStyle = '#2e7d32';
+      ctx.fillRect(0, 0, width, 60);
       
-      // Header
-      ctx.fillStyle = '#1a472a';
-      ctx.font = 'bold 22px Arial';
+      // Shop Name in white
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 20px Arial';
       ctx.textAlign = 'center';
-      y = 40;
-      ctx.fillText('🥛 SARITHA DAIRY', width / 2, y);
+      ctx.fillText('SARITHA DAIRY', width / 2, 38);
       
-      ctx.fillStyle = '#666';
-      ctx.font = '12px Arial';
-      y += 18;
-      ctx.fillText('Credit Statement', width / 2, y);
+      // ===== DATE =====
+      y = 85;
+      ctx.fillStyle = '#666666';
+      ctx.font = '13px Arial';
+      ctx.textAlign = 'center';
+      ctx.fillText(`Date: ${new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}`, width / 2, y);
       
-      y += 20;
+      // ===== DIVIDER LINE =====
+      y += 12;
       ctx.strokeStyle = '#e0e0e0';
       ctx.lineWidth = 1;
       ctx.beginPath();
@@ -301,146 +305,191 @@ const CreditManagement = () => {
       ctx.lineTo(width - padding, y);
       ctx.stroke();
       
-      // Customer Info
-      y += 20;
-      ctx.fillStyle = '#333';
-      ctx.font = 'bold 14px Arial';
-      ctx.textAlign = 'left';
-      
-      if (customer.customerName) {
-        ctx.fillText(`Customer: ${customer.customerName}`, padding, y);
-        y += 18;
-        ctx.font = '12px Arial';
-        ctx.fillStyle = '#666';
-        ctx.fillText(`Phone: ${customer.phone}`, padding, y);
-        y += 18;
-        ctx.fillText(`Date: ${new Date().toLocaleDateString('en-IN')}`, padding, y);
-      } else {
-        ctx.fillText('All Customers Summary', padding, y);
-        y += 18;
-        ctx.font = '12px Arial';
-        ctx.fillStyle = '#666';
-        ctx.fillText(`Date: ${new Date().toLocaleDateString('en-IN')}`, padding, y);
-      }
-      
-      // Summary Box
-      y += 25;
-      const boxY = y;
-      ctx.fillStyle = '#f0fdf4';
-      ctx.strokeStyle = '#c8e6c9';
-      ctx.lineWidth = 2;
-      roundRect(ctx, padding, y, width - (padding * 2), 65, 8);
-      ctx.fill();
-      ctx.stroke();
-      
-      ctx.fillStyle = '#1a472a';
-      ctx.font = 'bold 12px Arial';
-      y += 18;
-      ctx.fillText('SUMMARY', padding + 10, y);
-      
-      const totalCredit = customer.totalCredit || round2(creditCustomers.reduce((s, c) => s + c.totalCredit, 0));
-      const totalPaid = customer.totalPaid || 0;
-      const totalBalance = customer.totalBalance || round2(creditCustomers.reduce((s, c) => s + c.totalBalance, 0));
-      
-      ctx.font = '11px Arial';
-      const col1 = padding + 10;
-      const col2 = width / 2 - 20;
-      const col3 = width - padding - 10;
-      
-      y += 16;
-      ctx.fillStyle = '#333';
-      ctx.fillText('Total Credit:', col1, y);
-      ctx.fillStyle = '#1a472a';
-      ctx.font = 'bold 11px Arial';
-      ctx.textAlign = 'right';
-      ctx.fillText(`₹${round2(totalCredit).toLocaleString()}`, col2, y);
-      
-      ctx.fillStyle = '#2e7d32';
-      ctx.fillText('Paid:', col2 + 80, y);
-      ctx.fillText(`₹${round2(totalPaid).toLocaleString()}`, col3, y);
-      
-      y += 16;
-      ctx.fillStyle = '#333';
-      ctx.font = '11px Arial';
-      ctx.textAlign = 'left';
-      ctx.fillText('Balance:', col1, y);
-      ctx.font = 'bold 12px Arial';
-      ctx.fillStyle = totalBalance > 0 ? '#e65100' : '#2e7d32';
-      ctx.textAlign = 'right';
-      ctx.fillText(`₹${round2(totalBalance).toLocaleString()}`, col3, y);
-      
-      // Transactions
-      y = boxY + 75;
-      if (entries.length > 0) {
-        ctx.fillStyle = '#1a472a';
-        ctx.font = 'bold 12px Arial';
-        ctx.textAlign = 'left';
-        ctx.fillText('RECENT TRANSACTIONS', padding, y);
-        y += 5;
+      if (isAllCustomers) {
+        // ===== ALL CUSTOMERS SUMMARY =====
+        const totalPendingAmount = round2(creditCustomers.reduce((s, c) => s + c.totalBalance, 0));
+        const pendingCustomers = creditCustomers.filter(c => c.totalBalance > 0);
         
-        // Table header
-        y += 15;
+        y += 25;
+        ctx.fillStyle = '#333333';
+        ctx.font = 'bold 16px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('PENDING CREDITS', width / 2, y);
+        
+        y += 8;
+        ctx.textAlign = 'center';
+        ctx.font = '28px Arial';
+        ctx.fillStyle = '#e65100';
+        ctx.fillText(`₹${totalPendingAmount.toLocaleString()}`, width / 2, y);
+        
+        y += 18;
+        ctx.font = '12px Arial';
+        ctx.fillStyle = '#666';
+        ctx.fillText(`${pendingCustomers.length} customer(s) have pending balance`, width / 2, y);
+        
+        // List pending customers
+        if (pendingCustomers.length > 0) {
+          y += 25;
+          ctx.fillStyle = '#333';
+          ctx.font = 'bold 13px Arial';
+          ctx.textAlign = 'left';
+          ctx.fillText('Customer List:', padding, y);
+          
+          y += 18;
+          pendingCustomers.slice(0, 8).forEach((c, i) => {
+            // Alternate row background
+            if (i % 2 === 0) {
+              ctx.fillStyle = '#f9fafb';
+              ctx.fillRect(padding - 5, y - 12, width - (padding * 2) + 10, 38);
+            }
+            
+            ctx.fillStyle = '#333';
+            ctx.font = 'bold 13px Arial';
+            ctx.textAlign = 'left';
+            ctx.fillText(`${i + 1}. ${c.customerName}`, padding, y);
+            
+            ctx.fillStyle = '#e65100';
+            ctx.font = 'bold 13px Arial';
+            ctx.textAlign = 'right';
+            ctx.fillText(`₹${round2(c.totalBalance).toLocaleString()}`, width - padding, y);
+            
+            y += 18;
+            ctx.fillStyle = '#888';
+            ctx.font = '11px Arial';
+            ctx.textAlign = 'left';
+            ctx.fillText(`   📱 ${c.phone}`, padding, y);
+            
+            y += 22;
+          });
+        }
+        
+      } else {
+        // ===== SINGLE CUSTOMER STATEMENT =====
+        
+        // Customer Name
+        y += 20;
         ctx.fillStyle = '#1a472a';
-        ctx.fillRect(padding, y, width - (padding * 2), 22);
-        ctx.fillStyle = 'white';
-        ctx.font = 'bold 10px Arial';
-        ctx.fillText('Date', padding + 8, y + 15);
-        ctx.fillText('Product', padding + 100, y + 15);
-        ctx.fillText('Qty', width / 2 + 40, y + 15);
-        ctx.textAlign = 'right';
-        ctx.fillText('Amount', width - padding - 8, y + 15);
+        ctx.font = 'bold 18px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText(customer.customerName, width / 2, y);
         
         y += 22;
+        ctx.fillStyle = '#666';
+        ctx.font = '13px Arial';
+        ctx.fillText(`📱 ${customer.phone}`, width / 2, y);
+        
+        // ===== SUMMARY BOX =====
+        y += 25;
+        const boxX = padding;
+        const boxW = width - (padding * 2);
+        
+        // Box background
+        ctx.fillStyle = '#f5f5f5';
+        ctx.fillRect(boxX, y, boxW, 90);
+        ctx.strokeStyle = '#ddd';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(boxX, y, boxW, 90);
+        
+        y += 22;
+        // Row 1: Total Credit
+        ctx.fillStyle = '#555';
+        ctx.font = '13px Arial';
         ctx.textAlign = 'left';
+        ctx.fillText('Total Credit', boxX + 15, y);
+        ctx.fillStyle = '#333';
+        ctx.font = 'bold 13px Arial';
+        ctx.textAlign = 'right';
+        ctx.fillText(`₹${round2(customer.totalCredit).toLocaleString()}`, boxX + boxW - 15, y);
         
-        const sorted = [...entries].sort((a, b) => new Date(b.created_at || b.date) - new Date(a.created_at || a.date));
-        const showEntries = sorted.slice(0, 8);
+        y += 24;
+        // Row 2: Total Paid
+        ctx.fillStyle = '#555';
+        ctx.font = '13px Arial';
+        ctx.textAlign = 'left';
+        ctx.fillText('Total Paid', boxX + 15, y);
+        ctx.fillStyle = '#2e7d32';
+        ctx.font = 'bold 13px Arial';
+        ctx.textAlign = 'right';
+        ctx.fillText(`₹${round2(customer.totalPaid).toLocaleString()}`, boxX + boxW - 15, y);
         
-        showEntries.forEach((entry, index) => {
-          const bgColor = index % 2 === 0 ? '#ffffff' : '#f9fafb';
-          ctx.fillStyle = bgColor;
-          ctx.fillRect(padding, y, width - (padding * 2), 24);
-          
+        y += 24;
+        // Row 3: Divider
+        ctx.strokeStyle = '#ddd';
+        ctx.beginPath();
+        ctx.moveTo(boxX + 15, y - 2);
+        ctx.lineTo(boxX + boxW - 15, y - 2);
+        ctx.stroke();
+        
+        // Row 4: Balance
+        const balance = round2(customer.totalBalance);
+        ctx.fillStyle = '#333';
+        ctx.font = 'bold 14px Arial';
+        ctx.textAlign = 'left';
+        ctx.fillText('BALANCE DUE', boxX + 15, y + 8);
+        ctx.fillStyle = balance > 0 ? '#e65100' : '#2e7d32';
+        ctx.font = 'bold 16px Arial';
+        ctx.textAlign = 'right';
+        ctx.fillText(`₹${balance.toLocaleString()}`, boxX + boxW - 15, y + 8);
+        
+        // ===== RECENT TRANSACTIONS =====
+        if (entries.length > 0) {
+          y += 50;
           ctx.fillStyle = '#333';
-          ctx.font = '10px Arial';
-          ctx.fillText(new Date(entry.date || entry.created_at).toLocaleDateString('en-IN'), padding + 8, y + 16);
-          
-          const product = entry.items?.map(item => item.product).join(', ') || '';
-          ctx.fillText(product.substring(0, 20), padding + 100, y + 16);
-          
-          ctx.textAlign = 'center';
-          ctx.fillText(entry.items?.[0]?.quantity || '1', width / 2 + 45, y + 16);
-          
-          ctx.textAlign = 'right';
-          ctx.font = 'bold 10px Arial';
-          ctx.fillStyle = '#1a472a';
-          ctx.fillText(`₹${round2(entry.total_amount).toLocaleString()}`, width - padding - 8, y + 16);
-          
+          ctx.font = 'bold 14px Arial';
           ctx.textAlign = 'left';
-          y += 24;
-        });
-        
-        if (entries.length > 8) {
-          ctx.fillStyle = '#888';
-          ctx.font = 'italic 10px Arial';
-          ctx.textAlign = 'center';
-          ctx.fillText(`...and ${entries.length - 8} more entries`, width / 2, y + 10);
+          ctx.fillText('Recent Transactions', padding, y);
+          
+          const sorted = [...entries]
+            .sort((a, b) => new Date(b.created_at || b.date) - new Date(a.created_at || a.date))
+            .slice(0, 6);
+          
+          sorted.forEach((entry, i) => {
+            y += 18;
+            
+            // Alternate background
+            if (i % 2 === 0) {
+              ctx.fillStyle = '#fafafa';
+              ctx.fillRect(padding - 5, y - 10, width - (padding * 2) + 10, 35);
+            }
+            
+            const product = entry.items?.map(item => item.product).join(', ') || '';
+            const displayProduct = product.length > 20 ? product.substring(0, 18) + '..' : product;
+            
+            ctx.fillStyle = '#333';
+            ctx.font = '12px Arial';
+            ctx.textAlign = 'left';
+            ctx.fillText(displayProduct, padding, y);
+            
+            ctx.fillStyle = '#888';
+            ctx.font = '11px Arial';
+            const dateStr = new Date(entry.date || entry.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
+            ctx.fillText(dateStr, width / 2 - 20, y);
+            
+            ctx.fillStyle = '#1a472a';
+            ctx.font = 'bold 12px Arial';
+            ctx.textAlign = 'right';
+            ctx.fillText(`₹${round2(entry.total_amount).toLocaleString()}`, width - padding, y);
+            
+            y += 6;
+          });
         }
       }
       
-      // Footer
-      y = canvas.height - 60;
+      // ===== FOOTER =====
+      y = canvas.height - 55;
       ctx.strokeStyle = '#e0e0e0';
+      ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.moveTo(padding, y);
       ctx.lineTo(width - padding, y);
       ctx.stroke();
       
-      y += 20;
-      ctx.fillStyle = '#666';
+      y += 22;
+      ctx.fillStyle = '#888';
       ctx.font = '11px Arial';
       ctx.textAlign = 'center';
       ctx.fillText('Saritha Dairy - JNTU, Hyderabad', width / 2, y);
+      
       y += 16;
       ctx.fillText('📞 9398263810 | Pure by Nature, Trusted by Families', width / 2, y);
       
@@ -448,27 +497,33 @@ const CreditManagement = () => {
     });
   };
 
-  // Helper: Rounded rectangle
-  const roundRect = (ctx, x, y, w, h, r) => {
-    ctx.beginPath();
-    ctx.moveTo(x + r, y);
-    ctx.lineTo(x + w - r, y);
-    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
-    ctx.lineTo(x + w, y + h - r);
-    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-    ctx.lineTo(x + r, y + h);
-    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
-    ctx.lineTo(x, y + r);
-    ctx.quadraticCurveTo(x, y, x + r, y);
-    ctx.closePath();
-  };
-
   // ==================== SEND PDF-LIKE IMAGE VIA WHATSAPP ====================
   
-  const sendWhatsAppWithImage = async (customer) => {
-    showMsg('success', '📱 Generating...');
+  // ==================== SEND DIRECTLY TO CUSTOMER'S WHATSAPP ====================
+
+const sendWhatsAppWithImage = async (customer) => {
+    showMsg('success', '📱 Generating statement...');
+    
+    // Determine the phone number
+    let phoneNumber;
+    let isAllCustomers = !customer.customerName;
+    
+    if (isAllCustomers) {
+      // For all customers summary, send to admin number
+      phoneNumber = '9398263810'; // Your shop number
+    } else {
+      // Send to the customer's own number
+      phoneNumber = customer.phone;
+    }
+    
+    // Remove any non-digit characters and ensure 10 digits
+    phoneNumber = phoneNumber.replace(/\D/g, '');
+    if (phoneNumber.length === 10) {
+      phoneNumber = '91' + phoneNumber; // Add India country code
+    }
     
     try {
+      // Generate the image
       const imageDataUrl = await generateReceiptImage(customer);
       
       // Convert data URL to Blob
@@ -476,49 +531,93 @@ const CreditManagement = () => {
       const blob = await response.blob();
       const file = new File([blob], 'credit-statement.png', { type: 'image/png' });
       
-      // Create message text
-      const phone = customer.phone || '9398263810';
-      let caption = `🧾 *SARITHA DAIRY - Credit Statement*\n\n`;
-      caption += `📅 ${new Date().toLocaleDateString('en-IN')}\n`;
-      
-      if (customer.customerName) {
-        caption += `👤 ${customer.customerName}\n`;
-      }
-      caption += `\n📄 *Full statement attached as image*\n`;
-      caption += `📍 JNTU, Hyderabad | 📞 9398263810`;
-      
-      // Try Web Share API first (mobile)
-      if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
-        await navigator.share({
-          title: 'Credit Statement',
-          text: caption,
-          files: [file]
-        });
-        showMsg('success', '✅ Shared!');
+      // Create the caption text
+      let caption = '';
+      if (isAllCustomers) {
+        caption = `📊 *SARITHA DAIRY - Pending Credits Summary*\n\n`;
+        caption += `📅 ${new Date().toLocaleDateString('en-IN')}\n`;
+        caption += `💰 Total Pending: ₹${round2(creditCustomers.reduce((s, c) => s + c.totalBalance, 0)).toLocaleString()}\n`;
+        caption += `👥 Pending Customers: ${creditCustomers.filter(c => c.totalBalance > 0).length}\n`;
       } else {
-        // Fallback: Open WhatsApp with caption only
-        const encodedMessage = encodeURIComponent(caption);
-        const whatsappUrl = `https://wa.me/91${phone}?text=${encodedMessage}`;
-        window.open(whatsappUrl, '_blank');
-        showMsg('success', '📱 Opening WhatsApp...');
+        caption = `🧾 *SARITHA DAIRY - Credit Statement*\n\n`;
+        caption += `👤 *${customer.customerName}*\n`;
+        caption += `📅 ${new Date().toLocaleDateString('en-IN')}\n\n`;
+        caption += `📊 *SUMMARY*\n`;
+        caption += `💰 Total Credit: ₹${round2(customer.totalCredit).toLocaleString()}\n`;
+        caption += `✅ Total Paid: ₹${round2(customer.totalPaid).toLocaleString()}\n`;
+        
+        const bal = round2(customer.totalBalance);
+        if (bal > 0) {
+          caption += `⚠️ *Balance Due: ₹${bal.toLocaleString()}*\n`;
+        } else {
+          caption += `✅ *All Clear - No Dues*\n`;
+        }
       }
-    } catch (error) {
-      console.log('Share error:', error);
-      // Fallback to text-only WhatsApp
-      const phone = customer.phone || '9398263810';
-      let message = `🧾 *SARITHA DAIRY - Credit Statement*\n\n`;
-      message += `📅 ${new Date().toLocaleDateString('en-IN')}\n`;
-      if (customer.customerName) {
-        message += `👤 ${customer.customerName}\n`;
-        message += `📱 ${customer.phone}\n\n`;
-        message += `💰 Total: ₹${round2(customer.totalCredit).toLocaleString()}\n`;
-        message += `✅ Paid: ₹${round2(customer.totalPaid).toLocaleString()}\n`;
-        message += `⚠️ Balance: ₹${round2(customer.totalBalance).toLocaleString()}\n`;
-      }
-      message += `\n📍 JNTU, Hyderabad | 📞 9398263810`;
       
-      window.open(`https://wa.me/91${phone}?text=${encodeURIComponent(message)}`, '_blank');
-      showMsg('success', '📱 Text sent to WhatsApp');
+      caption += `\n📍 JNTU, Hyderabad\n📞 9398263810`;
+      
+      // Try Web Share API first (works on mobile)
+      if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+        try {
+          await navigator.share({
+            title: 'Credit Statement',
+            text: caption,
+            files: [file]
+          });
+          showMsg('success', '✅ Statement shared!');
+          setShowExportMenu(false);
+          return;
+        } catch (shareError) {
+          console.log('Share cancelled or failed, trying WhatsApp...');
+        }
+      }
+      
+      // Fallback 1: Try to open WhatsApp with the image via URL
+      // WhatsApp doesn't support direct image sharing via URL, so we send text + image via wa.me
+      
+      // Create a temporary anchor to trigger the image download
+      // Then redirect to WhatsApp with the text message
+      
+      // First, let the user save the image
+      const downloadLink = document.createElement('a');
+      downloadLink.href = imageDataUrl;
+      const filename = isAllCustomers 
+        ? `credit-summary-${new Date().toISOString().split('T')[0]}.png`
+        : `statement-${customer.customerName?.replace(/\s+/g, '-').toLowerCase()}.png`;
+      downloadLink.download = filename;
+      downloadLink.click();
+      
+      // Small delay then open WhatsApp
+      setTimeout(() => {
+        const encodedMessage = encodeURIComponent(caption);
+        const whatsappUrl = `https://wa.me/${phoneNumber}?text=${encodedMessage}`;
+        window.open(whatsappUrl, '_blank');
+      }, 500);
+      
+      showMsg('success', '📱 Opening WhatsApp & downloading image...');
+      
+    } catch (error) {
+      console.log('Error:', error);
+      // Ultimate fallback: Just open WhatsApp with text
+      let fallbackMsg = '';
+      if (isAllCustomers) {
+        fallbackMsg = `📊 *SARITHA DAIRY - Pending Credits*\n\n`;
+        fallbackMsg += `📅 ${new Date().toLocaleDateString('en-IN')}\n`;
+        const pending = creditCustomers.filter(c => c.totalBalance > 0);
+        fallbackMsg += `💰 Total Pending: ₹${round2(pending.reduce((s, c) => s + c.totalBalance, 0)).toLocaleString()}\n\n`;
+        pending.slice(0, 5).forEach((c, i) => {
+          fallbackMsg += `${i+1}. ${c.customerName} - ₹${round2(c.totalBalance).toLocaleString()}\n`;
+        });
+      } else {
+        fallbackMsg = `🧾 *Credit Statement - ${customer.customerName}*\n\n`;
+        fallbackMsg += `💰 Total: ₹${round2(customer.totalCredit).toLocaleString()}\n`;
+        fallbackMsg += `✅ Paid: ₹${round2(customer.totalPaid).toLocaleString()}\n`;
+        fallbackMsg += `⚠️ Balance: ₹${round2(customer.totalBalance).toLocaleString()}\n`;
+      }
+      fallbackMsg += `\n📍 JNTU, Hyderabad | 📞 9398263810`;
+      
+      window.open(`https://wa.me/${phoneNumber}?text=${encodeURIComponent(fallbackMsg)}`, '_blank');
+      showMsg('success', '📱 Opening WhatsApp...');
     }
     
     setShowExportMenu(false);
