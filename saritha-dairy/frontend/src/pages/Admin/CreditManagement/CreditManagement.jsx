@@ -251,6 +251,9 @@ const CreditManagement = () => {
   
   // ==================== GENERATE SIMPLE RECEIPT IMAGE ====================
 
+
+      // ==================== GENERATE SIMPLE RECEIPT IMAGE ====================
+
 const generateReceiptImage = (customer) => {
     return new Promise((resolve) => {
       const canvas = document.createElement('canvas');
@@ -496,11 +499,6 @@ const generateReceiptImage = (customer) => {
       resolve(canvas.toDataURL('image/png'));
     });
   };
-
-  // ==================== SEND PDF-LIKE IMAGE VIA WHATSAPP ====================
-  
-  // ==================== SEND DIRECTLY TO CUSTOMER'S WHATSAPP ====================
-
 const sendWhatsAppWithImage = async (customer) => {
     showMsg('success', '📱 Generating statement...');
     
