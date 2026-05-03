@@ -574,14 +574,16 @@ const generateReceiptImage = (customer) => {
   };
   // ==================== SEND TO CUSTOMER WHATSAPP ====================
 
-  const sendWhatsAppWithImage = async (customer) => {
+  // ==================== SEND DIRECTLY TO CUSTOMER WHATSAPP ====================
+
+const sendWhatsAppWithImage = async (customer) => {
     showMsg('success', '📱 Generating statement...');
     
     let phoneNumber;
     let isAllCustomers = !customer.customerName;
     
     if (isAllCustomers) {
-      phoneNumber = '9398263810';
+      phoneNumber = '9398263810'; // Shop number for summary
     } else {
       phoneNumber = customer.phone;
       
@@ -592,95 +594,113 @@ const generateReceiptImage = (customer) => {
       }
     }
     
+    // Clean and format phone number
     phoneNumber = phoneNumber.replace(/\D/g, '');
     if (phoneNumber.length === 10) {
       phoneNumber = '91' + phoneNumber;
+    } else if (phoneNumber.length > 10 && !phoneNumber.startsWith('91')) {
+      phoneNumber = '91' + phoneNumber.slice(-10);
     }
+    
+    console.log('📱 Sending WhatsApp to:', phoneNumber);
     
     try {
       const imageDataUrl = await generateReceiptImage(customer);
       
-      const response = await fetch(imageDataUrl);
-      const blob = await response.blob();
-      const file = new File([blob], 'credit-statement.png', { type: 'image/png' });
-      
+      // Prepare caption text
       let caption = '';
       if (isAllCustomers) {
-        caption = `📊 *SARITHA DAIRY - Pending Credits Summary*\n\n`;
+        caption = `📊 *SARITHA DAIRY - Pending Credits*\n\n`;
         caption += `📅 ${new Date().toLocaleDateString('en-IN')}\n`;
-        caption += `💰 Total Pending: ₹${round2(creditCustomers.reduce((s, c) => s + c.totalBalance, 0)).toLocaleString()}\n`;
-        caption += `👥 Pending Customers: ${creditCustomers.filter(c => c.totalBalance > 0).length}\n`;
+        const totalP = round2(creditCustomers.reduce((s, c) => s + c.totalBalance, 0));
+        caption += `💰 Total Pending: ₹${totalP.toLocaleString()}\n`;
+        caption += `👥 Customers: ${creditCustomers.filter(c => c.totalBalance > 0).length}\n`;
       } else {
-        caption = `🧾 *SARITHA DAIRY - Credit Statement*\n\n`;
+        caption = `🧾 *Credit Statement*\n\n`;
         caption += `👤 *${customer.customerName}*\n`;
         caption += `📅 ${new Date().toLocaleDateString('en-IN')}\n\n`;
-        caption += `📊 *SUMMARY*\n`;
+        caption += `📊 SUMMARY\n`;
         caption += `💰 Total Credit: ₹${round2(customer.totalCredit).toLocaleString()}\n`;
         caption += `✅ Total Paid: ₹${round2(customer.totalPaid).toLocaleString()}\n`;
-        
         const bal = round2(customer.totalBalance);
         if (bal > 0) {
           caption += `⚠️ *Balance Due: ₹${bal.toLocaleString()}*\n`;
         } else {
-          caption += `✅ *All Clear - No Dues*\n`;
+          caption += `✅ *All Clear*\n`;
         }
       }
+      caption += `\n📍 JNTU, Hyderabad | 📞 9398263810`;
       
-      caption += `\n📍 JNTU, Hyderabad\n📞 9398263810`;
+      // Check if we can share image directly (mobile)
+      const canShareImage = navigator.share && navigator.canShare;
       
-      // Try Web Share API (mobile)
-      if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+      if (canShareImage) {
         try {
-          await navigator.share({
+          const response = await fetch(imageDataUrl);
+          const blob = await response.blob();
+          const file = new File([blob], 'statement.png', { type: 'image/png' });
+          
+          const shareData = {
             title: 'Credit Statement',
             text: caption,
             files: [file]
-          });
-          showMsg('success', '✅ Statement shared!');
-          setShowExportMenu(false);
-          return;
+          };
+          
+          if (navigator.canShare(shareData)) {
+            await navigator.share(shareData);
+            showMsg('success', '✅ Sent!');
+            setShowExportMenu(false);
+            return;
+          }
         } catch (shareError) {
-          console.log('Share cancelled, trying WhatsApp...');
+          console.log('Share API failed, opening WhatsApp directly...');
         }
       }
       
-      // Desktop: Download image + open WhatsApp
-      const downloadLink = document.createElement('a');
-      downloadLink.href = imageDataUrl;
-      const filename = isAllCustomers 
-        ? `credit-summary-${new Date().toISOString().split('T')[0]}.png`
-        : `statement-${customer.customerName?.replace(/\s+/g, '-').toLowerCase()}.png`;
-      downloadLink.download = filename;
-      downloadLink.click();
+      // === DIRECT WHATSAPP OPEN ===
+      // This will ALWAYS open WhatsApp directly to the customer's number
       
-      setTimeout(() => {
-        const encodedMessage = encodeURIComponent(caption);
-        const whatsappUrl = `https://wa.me/${phoneNumber}?text=${encodedMessage}`;
-        window.open(whatsappUrl, '_blank');
-      }, 500);
-      
-      showMsg('success', '📱 Opening WhatsApp...');
+      if (!isAllCustomers && customer.phone) {
+        // For individual customer: Open WhatsApp directly to THEIR number
+        const encodedMsg = encodeURIComponent(caption);
+        const waUrl = `https://wa.me/${phoneNumber}?text=${encodedMsg}`;
+        
+        // Also download the image for manual attachment
+        const downloadLink = document.createElement('a');
+        downloadLink.href = imageDataUrl;
+        downloadLink.download = `statement-${customer.customerName?.replace(/\s+/g, '-') || 'customer'}.png`;
+        downloadLink.click();
+        
+        // Open WhatsApp with small delay
+        setTimeout(() => {
+          window.open(waUrl, '_blank');
+        }, 300);
+        
+        showMsg('success', `📱 Opening WhatsApp to ${customer.customerName}...`);
+      } else {
+        // For all customers summary
+        const encodedMsg = encodeURIComponent(caption);
+        const waUrl = `https://wa.me/${phoneNumber}?text=${encodedMsg}`;
+        window.open(waUrl, '_blank');
+        showMsg('success', '📱 Opening WhatsApp...');
+      }
       
     } catch (error) {
       console.log('Error:', error);
-      let fallbackMsg = '';
-      if (isAllCustomers) {
-        fallbackMsg = `📊 *SARITHA DAIRY - Pending Credits*\n\n`;
-        fallbackMsg += `📅 ${new Date().toLocaleDateString('en-IN')}\n`;
-        const pending = creditCustomers.filter(c => c.totalBalance > 0);
-        fallbackMsg += `💰 Total Pending: ₹${round2(pending.reduce((s, c) => s + c.totalBalance, 0)).toLocaleString()}\n\n`;
-        pending.slice(0, 5).forEach((c, i) => {
-          fallbackMsg += `${i+1}. ${c.customerName} - ₹${round2(c.totalBalance).toLocaleString()}\n`;
-        });
+      // Ultimate fallback: Direct WhatsApp text
+      let text = '';
+      if (!isAllCustomers && customer.customerName) {
+        text = `🧾 *Credit Statement - ${customer.customerName}*\n\n`;
+        text += `💰 Total: ₹${round2(customer.totalCredit).toLocaleString()}\n`;
+        text += `✅ Paid: ₹${round2(customer.totalPaid).toLocaleString()}\n`;
+        text += `⚠️ Balance: ₹${round2(customer.totalBalance).toLocaleString()}\n`;
       } else {
-        fallbackMsg = `🧾 *Credit Statement - ${customer.customerName}*\n\n`;
-        fallbackMsg += `💰 Total: ₹${round2(customer.totalCredit).toLocaleString()}\n`;
-        fallbackMsg += `✅ Paid: ₹${round2(customer.totalPaid).toLocaleString()}\n`;
-        fallbackMsg += `⚠️ Balance: ₹${round2(customer.totalBalance).toLocaleString()}\n`;
+        text = `📊 *Pending Credits: ₹${round2(creditCustomers.reduce((s, c) => s + c.totalBalance, 0)).toLocaleString()}*\n`;
+        text += `👥 ${creditCustomers.filter(c => c.totalBalance > 0).length} customers pending\n`;
       }
-      fallbackMsg += `\n📍 JNTU, Hyderabad | 📞 9398263810`;
+      text += `\n📍 JNTU, Hyderabad | 📞 9398263810`;
       
-      window.open(`https://wa.me/${phoneNumber}?text=${encodeURIComponent(fallbackMsg)}`, '_blank');
+      window.open(`https://wa.me/${phoneNumber}?text=${encodeURIComponent(text)}`, '_blank');
       showMsg('success', '📱 Opening WhatsApp...');
     }
     
