@@ -12,7 +12,7 @@ try {
   cloudinary.config({
     cloud_name: 'dzuixvh7w',
     api_key: process.env.CLOUDINARY_API_KEY || '518573852955247',
-    api_secret: process.env.CLOUDINARY_API_SECRET || ''
+    api_secret: process.env.CLOUDINARY_API_SECRET || '4xcgwRnRM3m6VJHXupnXzummQaU'
   });
   
   const storage = new CloudinaryStorage({
