@@ -117,7 +117,6 @@ const CustomerDashboard = () => {
           setPreferences(apiPrefs);
           localStorage.setItem(`milkPrefs_${userData.id}`, JSON.stringify(apiPrefs));
           
-          // Load orders from API
           const orders = safeParseArray(prefData.data.extra_orders);
           if (orders.length > 0) {
             const fixedOrders = orders.map(o => ({ ...o, imageUrl: getImageUrl(o.imageUrl) || o.imageUrl }));
@@ -154,27 +153,21 @@ const CustomerDashboard = () => {
     setPreferences(newPrefs); 
     setSaving(true);
     const cleanPrefs = {
-      wantMilk: newPrefs.wantMilk,
-      quantity: newPrefs.quantity,
-      packSize: newPrefs.packSize,
-      skipDays: newPrefs.skipDays || []
+      wantMilk: newPrefs.wantMilk, quantity: newPrefs.quantity,
+      packSize: newPrefs.packSize, skipDays: newPrefs.skipDays || []
     };
     localStorage.setItem(`milkPrefs_${userData.id}`, JSON.stringify(cleanPrefs));
     try {
       await fetch(`${API_URL}/customer-preferences/${userData.id}`, {
         method: 'POST', headers: getAuthHeaders(),
         body: JSON.stringify({ 
-          wantMilk: cleanPrefs.wantMilk,
-          quantity: cleanPrefs.quantity,
-          packSize: cleanPrefs.packSize,
-          skipDays: cleanPrefs.skipDays,
+          wantMilk: cleanPrefs.wantMilk, quantity: cleanPrefs.quantity,
+          packSize: cleanPrefs.packSize, skipDays: cleanPrefs.skipDays,
           extraOrders: extraOrders || []
         })
       });
       showMessage('success', '✅ Saved!');
-    } catch (error) {
-      showMessage('success', '✅ Saved locally!');
-    }
+    } catch (error) { showMessage('success', '✅ Saved locally!'); }
     setSaving(false);
   };
 
@@ -185,10 +178,8 @@ const CustomerDashboard = () => {
       await fetch(`${API_URL}/customer-preferences/${userData.id}`, {
         method: 'POST', headers: getAuthHeaders(),
         body: JSON.stringify({ 
-          wantMilk: preferences.wantMilk,
-          quantity: preferences.quantity,
-          packSize: preferences.packSize,
-          skipDays: preferences.skipDays || [],
+          wantMilk: preferences.wantMilk, quantity: preferences.quantity,
+          packSize: preferences.packSize, skipDays: preferences.skipDays || [],
           extraOrders: newOrders 
         })
       });
@@ -202,7 +193,7 @@ const CustomerDashboard = () => {
     const newOrder = {
       id: Date.now(), productName: selectedProduct.name, packSize: selectedPackSize,
       quantity: orderQuantity, price: pack?.price || 0, date: today, imageUrl: selectedProduct.imageUrl,
-      status: 'pending' // ✅ New orders start as pending
+      status: 'pending'
     };
     saveExtraOrders([...extraOrders, newOrder]);
     setSelectedProduct(null); setSelectedPackSize(''); setOrderQuantity(1); setShowProductModal(false);
@@ -215,11 +206,7 @@ const CustomerDashboard = () => {
   const handleLogout = () => { setShowLogoutConfirm(true); };
 
   const confirmLogout = () => {
-    const cleanPrefs = {
-      wantMilk: preferences.wantMilk, quantity: preferences.quantity,
-      packSize: preferences.packSize, skipDays: preferences.skipDays || [],
-      extraOrders: extraOrders || []
-    };
+    const cleanPrefs = { wantMilk: preferences.wantMilk, quantity: preferences.quantity, packSize: preferences.packSize, skipDays: preferences.skipDays || [], extraOrders: extraOrders || [] };
     localStorage.setItem(`milkPrefs_${userData.id}`, JSON.stringify(cleanPrefs));
     sessionStorage.clear();
     window.location.href = '/login';
@@ -250,19 +237,23 @@ const CustomerDashboard = () => {
   const today = new Date().toISOString().split('T')[0];
   const todayDelivered = deliveries.filter(d => d.delivery_date?.startsWith(today) && d.status === 'delivered');
 
-  // ✅ Check if order is delivered (cleared by delivery boy)
   const isOrderDelivered = (order) => {
-    // If order has status field, use it
     if (order.status === 'delivered') return true;
-    
-    // Also check if this product was delivered today from daily_delivery
     const deliveredProduct = deliveries.find(d => 
-      d.delivery_date?.startsWith(today) && 
-      d.product_name === order.productName &&
-      d.status === 'delivered'
+      d.delivery_date?.startsWith(today) && d.product_name === order.productName && d.status === 'delivered'
     );
     return !!deliveredProduct;
   };
+
+  // ✅ Calculate totals
+  const thisMonthDeliveries = deliveries.filter(d => {
+    const dDate = new Date(d.delivery_date);
+    const now = new Date();
+    return dDate.getMonth() === now.getMonth() && dDate.getFullYear() === now.getFullYear();
+  });
+  const milkTotal = thisMonthDeliveries.reduce((s, d) => s + (parseFloat(d.total_amount) || 0), 0);
+  const extraOrdersTotal = extraOrders.reduce((s, o) => s + (o.price * o.quantity), 0);
+  const grandTotal = milkTotal + extraOrdersTotal;
 
   const hour = currentTime.getHours();
   const timeEmoji = hour < 12 ? '🌅' : hour < 17 ? '☀️' : '🌙';
@@ -281,15 +272,19 @@ const CustomerDashboard = () => {
     <div className="cst-magic-app">
       {message && (<div className={`cst-toast-glass ${message.type}`}><span>{message.text}</span><button onClick={() => setMessage(null)}>×</button></div>)}
 
+      {/* ✅ Logout Confirmation Modal */}
       {showLogoutConfirm && (
         <div className="cst-modal-overlay" onClick={cancelLogout}>
-          <div className="cst-modal-magic" onClick={e => e.stopPropagation()} style={{maxWidth:'350px',margin:'auto',borderRadius:'24px'}}>
+          <div className="cst-modal-magic" onClick={e => e.stopPropagation()} style={{maxWidth:'320px',margin:'auto',borderRadius:'24px',padding:'24px'}}>
             <div className="cst-modal-handle"></div>
             <div style={{textAlign:'center',padding:'10px 0'}}>
               <span style={{fontSize:'50px',display:'block',marginBottom:'10px'}}>🚪</span>
-              <h3 style={{margin:'0 0 6px',fontSize:'18px'}}>Logout?</h3>
+              <h3 style={{margin:'0 0 6px',fontSize:'18px',color:'#1a1a1a'}}>Logout?</h3>
               <p style={{color:'#94a3b8',fontSize:'13px',margin:'0 0 20px'}}>Are you sure you want to logout?</p>
-              <div style={{display:'flex',gap:'10px'}}><button onClick={cancelLogout} className="cst-btn-ghost" style={{flex:1}}>Cancel</button><button onClick={confirmLogout} className="cst-btn-magic" style={{flex:1,background:'#ef4444'}}>Logout</button></div>
+              <div style={{display:'flex',gap:'10px'}}>
+                <button onClick={cancelLogout} className="cst-btn-ghost" style={{flex:1,padding:'12px',borderRadius:'14px',border:'none',background:'#f3f4f6',fontWeight:'600',fontSize:'14px',cursor:'pointer'}}>Cancel</button>
+                <button onClick={confirmLogout} className="cst-btn-magic" style={{flex:1,background:'#ef4444',padding:'12px',borderRadius:'14px',border:'none',color:'white',fontWeight:'700',fontSize:'14px',cursor:'pointer'}}>Logout</button>
+              </div>
             </div>
           </div>
         </div>
@@ -321,6 +316,7 @@ const CustomerDashboard = () => {
         </div>
       )}
 
+      {/* ✅ Header with Logout button properly placed */}
       <header className="cst-header-magic">
         <div className="cst-header-user" onClick={()=>setShowProfile(!showProfile)}>
           <div className="cst-avatar-magic"><div className="cst-avatar-core">{userData?.name?.charAt(0)?.toUpperCase()||'C'}</div><div className={`cst-avatar-aura ${pulseAnim?'pulse':''}`}></div></div>
@@ -328,7 +324,9 @@ const CustomerDashboard = () => {
         </div>
         <div className="cst-header-actions">
           <button className="cst-cart-magic" onClick={()=>setActiveTab('orders')}>🛒{cartCount>0&&<span className="cst-cart-dot-magic">{cartCount}</span>}</button>
-          <button onClick={handleLogout} className="cst-logout-icon-btn" title="Logout">🚪</button>
+          <button onClick={handleLogout} className="cst-logout-icon-btn" title="Logout">
+            <span>🚪</span>
+          </button>
         </div>
       </header>
 
@@ -336,85 +334,75 @@ const CustomerDashboard = () => {
         <div className="cst-profile-panel">
           <div className="cst-profile-avatar-big">{userData?.name?.charAt(0)?.toUpperCase()}</div><h3>{userData?.name}</h3><p>📱 {userData?.phone}</p>
           <div className="cst-profile-grid-2"><span>🏢 {userData?.apartment||'N/A'}</span><span>🚪 {userData?.flat_no||'N/A'}</span></div>
-          <button onClick={()=>setShowProfile(false)} className="cst-btn-ghost">Close</button>
+          <div style={{display:'flex',gap:'8px',marginTop:'12px'}}>
+            <button onClick={handleChangePassword} className="cst-btn-ghost" style={{flex:1,fontSize:'12px'}}>🔒 Password</button>
+            <button onClick={handleLogout} className="cst-btn-magic" style={{flex:1,background:'#ef4444',fontSize:'12px'}}>🚪 Logout</button>
+          </div>
         </div>
       )}
 
       <main className="cst-main-scroll">
         {/* HOME TAB */}
         {activeTab === 'home' && (<>
-          <div className="cst-hero-magic"><div className="cst-hero-content-magic"><span className="cst-hero-pill">🥛 Fresh Daily</span><h1>Pure Dairy.<br/>Pure Love.</h1><p>Farm fresh products delivered to your doorstep every morning</p><div className="cst-hero-stats"><span>🚀 Free Delivery</span><span>⭐ 4.8 Rating</span></div></div><div className="cst-hero-visual-magic"><span className="cst-hero-float-1">🥛</span><span className="cst-hero-float-2">🧀</span></div></div>
+          <div className="cst-hero-magic">
+            <div className="cst-hero-content-magic"><span className="cst-hero-pill">🥛 Fresh Daily</span><h1>Pure Dairy.<br/>Pure Love.</h1><p>Farm fresh products delivered to your doorstep every morning</p><div className="cst-hero-stats"><span>🚀 Free Delivery</span><span>⭐ 4.8 Rating</span></div></div>
+            <div className="cst-hero-visual-magic"><span className="cst-hero-float-1">🥛</span><span className="cst-hero-float-2">🧀</span></div>
+          </div>
+
+          {/* ✅ TOTAL BILL CARD */}
+          <div className="cst-bill-card">
+            <div className="cst-bill-header">
+              <span>💰 Your Bill</span>
+              <span className="cst-bill-date">{new Date().toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })}</span>
+            </div>
+            <div className="cst-bill-section">
+              <p className="cst-bill-section-title">🥛 Milk Subscription</p>
+              <div className="cst-bill-row"><span>{preferences.quantity || 2} × {preferences.packSize || '500ml'} per day</span><span className="text-green">Active</span></div>
+              <div className="cst-bill-row"><span>Monthly deliveries</span><span>{thisMonthDeliveries.length} packets</span></div>
+              <div className="cst-bill-row"><span>Milk Charges</span><strong>₹{milkTotal.toLocaleString()}</strong></div>
+            </div>
+            <div className="cst-bill-section">
+              <p className="cst-bill-section-title">📦 Extra Products</p>
+              {extraOrders.length === 0 ? (
+                <p className="cst-bill-empty">No extra orders yet</p>
+              ) : (
+                extraOrders.slice(0, 5).map((order, i) => (
+                  <div key={i} className="cst-bill-row">
+                    <span>{order.productName} ({order.packSize}) ×{order.quantity}</span>
+                    <span className={order.status === 'delivered' ? 'text-green' : 'text-orange'}>
+                      ₹{order.price * order.quantity}
+                      {order.status === 'delivered' ? ' ✅' : ' ⏳'}
+                    </span>
+                  </div>
+                ))
+              )}
+              {extraOrders.length > 5 && <p className="cst-bill-more">+{extraOrders.length - 5} more items</p>}
+              <div className="cst-bill-row"><span>Extra Charges</span><strong>₹{extraOrdersTotal.toLocaleString()}</strong></div>
+            </div>
+            <div className="cst-bill-total">
+              <span>Total Amount</span>
+              <strong>₹{grandTotal.toLocaleString()}</strong>
+            </div>
+          </div>
+
           {todayDelivered.length>0&&(<div className="cst-status-strip"><span>✅ Milk delivered today! ({todayDelivered.length} packet)</span><button onClick={()=>setShowFeedback(true)}>Rate</button></div>)}
           <div className="cst-section-header"><div><h3>🛍️ Our Products</h3><p>Tap to add to your cart</p></div></div>
           <div className="cst-magic-grid">{allProducts.length===0?(<div className="cst-empty-magic"><span>📦</span><p>No products available</p></div>):allProducts.map((product,i)=>{const color=getProductColor(product.name);const minPrice=product.packs.length>0?Math.min(...product.packs.map(p=>parseFloat(p.price)||0)):0;const maxPrice=product.packs.length>0?Math.max(...product.packs.map(p=>parseFloat(p.price)||0)):0;return(<div key={product.id} className={`cst-magic-card ${color}`} style={{animationDelay:`${i*0.05}s`}} onClick={()=>{setSelectedProduct(product);setSelectedPackSize('');setOrderQuantity(1);setShowProductModal(true);}}><div className="cst-magic-card-img">{product.imageUrl?(<img src={product.imageUrl} alt={product.name} loading="lazy" onError={e=>{e.target.style.display='none';e.target.nextSibling.style.display='flex';}}/>):null}<span className="cst-magic-fallback" style={{display:product.imageUrl?'none':'flex'}}>📷</span><div className="cst-magic-price">{minPrice===maxPrice?`₹${minPrice}`:`₹${minPrice}-${maxPrice}`}</div><div className="cst-magic-rating">⭐ 4.8</div></div><div className="cst-magic-card-body"><h4>{product.name}</h4><p>{product.packs.map(p=>`${p.size}${p.unit}`).join(' · ')}</p><button className="cst-magic-add-btn"><span>+</span> Add</button></div></div>)})}</div>
         </>)}
 
-        {/* ✅ ORDERS TAB - WITH CLEAR DELIVERY STATUS */}
+        {/* ORDERS TAB */}
         {activeTab === 'orders' && (
           <div className="cst-section">
             <h3>🛒 Your Orders</h3>
             {extraOrders.length === 0 ? (
-              <div className="cst-empty-magic"><span>🛒</span><p>No orders yet</p>
-                <button onClick={() => setActiveTab('home')} className="cst-btn-magic">Browse Products</button>
-              </div>
-            ) : (
-              <>
-                {/* Today's Orders */}
-                <p className="cst-subtitle">📅 Today's Orders</p>
-                {extraOrders.filter(o => o.date === today).length === 0 ? (
-                  <div className="cst-no-orders-today">
-                    <span>📭</span>
-                    <p>No orders for today yet</p>
-                  </div>
-                ) : (
-                  extraOrders.filter(o => o.date === today).map(o => {
-                    const delivered = isOrderDelivered(o);
-                    return (
-                      <div key={o.id} className={`cst-order-card ${delivered ? 'delivered-card' : 'pending-card'}`}>
-                        <div className="cst-order-img">
-                          {o.imageUrl ? <img src={o.imageUrl} alt={o.productName} /> : <span>📦</span>}
-                        </div>
-                        <div className="cst-order-info">
-                          <h5>{o.productName}</h5>
-                          <p>{o.packSize} × {o.quantity}</p>
-                        </div>
-                        <div className="cst-order-right">
-                          <strong>₹{o.price * o.quantity}</strong>
-                          {/* ✅ CLEAR STATUS BADGE */}
-                          <span className={`cst-order-status-badge ${delivered ? 'delivered' : 'pending'}`}>
-                            {delivered ? '✅ Delivered' : '⏳ Pending'}
-                          </span>
-                        </div>
-                        {!delivered && (
-                          <button onClick={() => removeExtraOrder(o.id)} className="cst-order-del">×</button>
-                        )}
-                      </div>
-                    );
-                  })
-                )}
-
-                {/* Previous Orders */}
-                {extraOrders.filter(o => o.date !== today).length > 0 && (
-                  <>
-                    <p className="cst-subtitle" style={{marginTop:'20px'}}>📜 Previous Orders</p>
-                    {extraOrders.filter(o => o.date !== today).map(o => {
-                      const delivered = isOrderDelivered(o);
-                      return (
-                        <div key={o.id} className={`cst-order-card past ${delivered ? 'was-delivered' : ''}`}>
-                          <span className="cst-past-icon">{delivered ? '✅' : '📦'}</span>
-                          <span className="cst-past-product">{o.productName} ({o.packSize}) ×{o.quantity}</span>
-                          <span className="cst-past-date">{new Date(o.date).toLocaleDateString('en-IN',{day:'numeric',month:'short'})}</span>
-                          <span className={`cst-order-status-badge small ${delivered ? 'delivered' : 'pending'}`}>
-                            {delivered ? 'Delivered' : 'Pending'}
-                          </span>
-                          <strong>₹{o.price * o.quantity}</strong>
-                        </div>
-                      );
-                    })}
-                  </>
-                )}
-              </>
-            )}
+              <div className="cst-empty-magic"><span>🛒</span><p>No orders yet</p><button onClick={()=>setActiveTab('home')} className="cst-btn-magic">Browse Products</button></div>
+            ) : (<>
+              <p className="cst-subtitle">📅 Today's Orders</p>
+              {extraOrders.filter(o=>o.date===today).length===0 ? (
+                <div className="cst-no-orders-today"><span>📭</span><p>No orders for today yet</p></div>
+              ) : extraOrders.filter(o=>o.date===today).map(o=>{const delivered=isOrderDelivered(o);return(<div key={o.id} className={`cst-order-card ${delivered?'delivered-card':'pending-card'}`}><div className="cst-order-img">{o.imageUrl?<img src={o.imageUrl} alt={o.productName}/>:<span>📦</span>}</div><div className="cst-order-info"><h5>{o.productName}</h5><p>{o.packSize} × {o.quantity}</p></div><div className="cst-order-right"><strong>₹{o.price*o.quantity}</strong><span className={`cst-order-status-badge ${delivered?'delivered':'pending'}`}>{delivered?'✅ Delivered':'⏳ Pending'}</span></div>{!delivered&&<button onClick={()=>removeExtraOrder(o.id)} className="cst-order-del">×</button>}</div>)})}
+              {extraOrders.filter(o=>o.date!==today).length>0&&(<><p className="cst-subtitle" style={{marginTop:'20px'}}>📜 Previous Orders</p>{extraOrders.filter(o=>o.date!==today).map(o=>{const delivered=isOrderDelivered(o);return(<div key={o.id} className={`cst-order-card past ${delivered?'was-delivered':''}`}><span className="cst-past-icon">{delivered?'✅':'📦'}</span><span className="cst-past-product">{o.productName} ({o.packSize}) ×{o.quantity}</span><span className="cst-past-date">{new Date(o.date).toLocaleDateString('en-IN',{day:'numeric',month:'short'})}</span><span className={`cst-order-status-badge small ${delivered?'delivered':'pending'}`}>{delivered?'Delivered':'Pending'}</span><strong>₹{o.price*o.quantity}</strong></div>)})}</>)}
+            </>)}
           </div>
         )}
 
