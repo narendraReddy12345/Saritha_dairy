@@ -10,7 +10,7 @@ try {
   CloudinaryStorage = require('multer-storage-cloudinary').CloudinaryStorage;
   
   cloudinary.config({
-    cloud_name: 'dzuixvh7w',
+    cloud_name: 'dmu3tqxgb',
     api_key: process.env.CLOUDINARY_API_KEY || '342286483387765',
     api_secret: process.env.CLOUDINARY_API_SECRET || '4xcgwRnRM3m6VJHXupnXzummQaU'
   });
