@@ -69,7 +69,19 @@ const CustomerDashboard = () => {
     }
   }, [confetti]);
 
-  // ✅ ALWAYS fetch from API - never rely on localStorage for images
+  // ✅ Helper to parse orders safely
+  const parseOrders = (ordersData) => {
+    if (!ordersData) return [];
+    if (Array.isArray(ordersData)) return ordersData;
+    if (typeof ordersData === 'string') {
+      try {
+        const parsed = JSON.parse(ordersData);
+        return Array.isArray(parsed) ? parsed : [];
+      } catch (e) { return []; }
+    }
+    return [];
+  };
+
   const fetchAllProducts = async () => {
     try {
       const res = await fetch(`${API_URL}/products`, { headers: getAuthHeaders() });
@@ -78,11 +90,32 @@ const CustomerDashboard = () => {
         const productsWithPacks = (data.data || []).map(p => ({
           ...p,
           packs: typeof p.packs === 'string' ? JSON.parse(p.packs) : (p.packs || []),
-          imageUrl: getImageUrl(p.image_url) // ✅ Always reconstruct from API
+          imageUrl: getImageUrl(p.image_url)
         }));
         setAllProducts(productsWithPacks);
       }
     } catch (e) { console.error('Error fetching products:', e); }
+  };
+
+  // ✅ Save orders to database
+  const saveOrdersToDB = async (orders) => {
+    try {
+      const res = await fetch(`${API_URL}/customer-preferences/${userData.id}`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ 
+          wantMilk: preferences.wantMilk,
+          quantity: preferences.quantity,
+          packSize: preferences.packSize,
+          skipDays: preferences.skipDays,
+          extraOrders: orders 
+        })
+      });
+      const data = await res.json();
+      console.log('💾 Orders saved to DB:', data.success);
+    } catch (error) {
+      console.error('Failed to save orders to DB:', error);
+    }
   };
 
   const loadCustomerData = async () => {
@@ -93,39 +126,81 @@ const CustomerDashboard = () => {
       
       // ✅ Load preferences & orders from API (database)
       try {
+        console.log('📡 Fetching preferences from API...');
         const prefRes = await fetch(`${API_URL}/customer-preferences/${userData.id}`, { headers: getAuthHeaders() });
         const prefData = await prefRes.json();
+        
+        console.log('📦 Preferences API Response:', prefData);
+        
         if (prefData.success && prefData.data) {
           setPreferences({
             wantMilk: prefData.data.want_milk ?? true,
             quantity: prefData.data.quantity ?? 2,
             packSize: prefData.data.pack_size ?? '500ml',
-            skipDays: typeof prefData.data.skip_days === 'string' ? JSON.parse(prefData.data.skip_days) : (prefData.data.skip_days || [])
+            skipDays: parseOrders(prefData.data.skip_days)
           });
-          if (prefData.data.extra_orders) {
-            const orders = typeof prefData.data.extra_orders === 'string' 
-              ? JSON.parse(prefData.data.extra_orders) 
-              : prefData.data.extra_orders;
-            // ✅ Fix image URLs in orders from API
+          
+          // ✅ Load orders from database
+          const orders = parseOrders(prefData.data.extra_orders);
+          console.log('🛒 Orders loaded from DB:', orders.length);
+          
+          if (orders.length > 0) {
             const fixedOrders = orders.map(o => ({
               ...o,
               imageUrl: getImageUrl(o.imageUrl) || o.imageUrl
             }));
             setExtraOrders(fixedOrders);
+            // Update localStorage backup
+            localStorage.setItem(`extraOrders_${userData.id}`, JSON.stringify(fixedOrders));
+          } else {
+            // Try localStorage as fallback
+            const savedOrders = localStorage.getItem(`extraOrders_${userData.id}`);
+            if (savedOrders) {
+              const localOrders = parseOrders(savedOrders);
+              if (localOrders.length > 0) {
+                console.log('📦 Loaded from localStorage:', localOrders.length);
+                const fixedOrders = localOrders.map(o => ({
+                  ...o,
+                  imageUrl: getImageUrl(o.imageUrl) || o.imageUrl
+                }));
+                setExtraOrders(fixedOrders);
+                // Migrate to DB
+                saveOrdersToDB(fixedOrders);
+              }
+            }
+          }
+        } else {
+          // No preferences in DB, try localStorage
+          console.log('⚠️ No preferences in DB, checking localStorage');
+          const savedPrefs = localStorage.getItem(`milkPrefs_${userData.id}`);
+          if (savedPrefs) {
+            try { setPreferences(JSON.parse(savedPrefs)); } catch (e) {}
+          }
+          const savedOrders = localStorage.getItem(`extraOrders_${userData.id}`);
+          if (savedOrders) {
+            const localOrders = parseOrders(savedOrders);
+            const fixedOrders = localOrders.map(o => ({
+              ...o,
+              imageUrl: getImageUrl(o.imageUrl) || o.imageUrl
+            }));
+            setExtraOrders(fixedOrders);
+            // Save to DB for first time
+            saveOrdersToDB(fixedOrders);
           }
         }
       } catch (e) {
-        // Fallback to localStorage only if API fails
+        console.log('❌ API failed, using localStorage');
         const savedPrefs = localStorage.getItem(`milkPrefs_${userData.id}`);
-        if (savedPrefs) setPreferences(JSON.parse(savedPrefs));
+        if (savedPrefs) {
+          try { setPreferences(JSON.parse(savedPrefs)); } catch (e) {}
+        }
         const savedOrders = localStorage.getItem(`extraOrders_${userData.id}`);
         if (savedOrders) {
-          const orders = JSON.parse(savedOrders);
-          const fixedOrders = orders.map(o => ({
+          const orders = parseOrders(savedOrders);
+          setExtraOrders(orders.map(o => ({
             ...o,
             imageUrl: getImageUrl(o.imageUrl) || o.imageUrl
-          }));
-          setExtraOrders(fixedOrders);
+          })));
         }
       }
     } catch (error) { console.error('Error:', error); }
@@ -133,27 +208,33 @@ const CustomerDashboard = () => {
   };
 
   const savePreferences = async (newPrefs) => {
-    setPreferences(newPrefs); setSaving(true);
+    setPreferences(newPrefs); 
+    setSaving(true);
     localStorage.setItem(`milkPrefs_${userData.id}`, JSON.stringify(newPrefs));
     try {
       await fetch(`${API_URL}/customer-preferences/${userData.id}`, {
         method: 'POST', headers: getAuthHeaders(),
-        body: JSON.stringify({ ...newPrefs, extraOrders })
+        body: JSON.stringify({ 
+          wantMilk: newPrefs.wantMilk,
+          quantity: newPrefs.quantity,
+          packSize: newPrefs.packSize,
+          skipDays: newPrefs.skipDays,
+          extraOrders: extraOrders
+        })
       });
-    } catch (error) {}
+      showMessage('success', '✅ Preferences saved!');
+    } catch (error) {
+      showMessage('success', '✅ Saved locally!');
+    }
     setSaving(false);
-    showMessage('success', '✅ Preferences saved!');
   };
 
   const saveExtraOrders = async (newOrders) => {
     setExtraOrders(newOrders);
+    // Save to localStorage
     localStorage.setItem(`extraOrders_${userData.id}`, JSON.stringify(newOrders));
-    try {
-      await fetch(`${API_URL}/customer-preferences/${userData.id}`, {
-        method: 'POST', headers: getAuthHeaders(),
-        body: JSON.stringify({ ...preferences, extraOrders: newOrders })
-      });
-    } catch (error) {}
+    // Save to database
+    await saveOrdersToDB(newOrders);
   };
 
   const addProductWithQuantity = () => {
@@ -173,21 +254,16 @@ const CustomerDashboard = () => {
   const removeExtraOrder = (id) => { saveExtraOrders(extraOrders.filter(o => o.id !== id)); };
   const showMessage = (type, text) => { setMessage({ type, text }); setTimeout(() => setMessage(null), 2500); };
 
-  // ✅ Proper Logout with confirmation
-  const handleLogout = () => {
-    setShowLogoutConfirm(true);
-  };
+  const handleLogout = () => { setShowLogoutConfirm(true); };
 
   const confirmLogout = () => {
+    // Save orders before logout
+    saveOrdersToDB(extraOrders);
     sessionStorage.clear();
-    // ✅ Don't clear all localStorage - keep orders and preferences
     window.location.href = '/login';
   };
 
-  const cancelLogout = () => {
-    setShowLogoutConfirm(false);
-  };
-
+  const cancelLogout = () => { setShowLogoutConfirm(false); };
   const handleChangePassword = () => { window.location.href = '/customer/change-password'; };
 
   const submitFeedback = () => {
@@ -237,7 +313,7 @@ const CustomerDashboard = () => {
         </div>
       )}
 
-      {/* ✅ Logout Confirmation Modal */}
+      {/* Logout Confirmation Modal */}
       {showLogoutConfirm && (
         <div className="cst-modal-overlay" onClick={cancelLogout}>
           <div className="cst-modal-magic" onClick={e => e.stopPropagation()} style={{maxWidth:'350px',margin:'auto',borderRadius:'24px'}}>
@@ -345,7 +421,7 @@ const CustomerDashboard = () => {
         </div>
       )}
 
-      {/* ✅ FIXED: Sticky Header */}
+      {/* Header */}
       <header className="cst-header-magic">
         <div className="cst-header-user" onClick={() => setShowProfile(!showProfile)}>
           <div className="cst-avatar-magic">
@@ -380,7 +456,7 @@ const CustomerDashboard = () => {
         </div>
       )}
 
-      {/* ✅ FIXED: Scrollable Content with proper padding */}
+      {/* Scrollable Content */}
       <main className="cst-main-scroll">
         {/* HOME TAB */}
         {activeTab === 'home' && (
@@ -547,7 +623,7 @@ const CustomerDashboard = () => {
         )}
       </main>
 
-      {/* ✅ FIXED: Sticky Bottom Nav */}
+      {/* Sticky Bottom Nav */}
       <nav className="cst-nav-magic">
         {[
           { id: 'home', icon: '🏪', label: 'Shop' },
