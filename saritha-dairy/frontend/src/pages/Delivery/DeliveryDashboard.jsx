@@ -76,7 +76,10 @@ const DeliveryDashboard = () => {
               wantMilk: p.want_milk,
               quantity: p.quantity || 2,
               packSize: p.pack_size || '500ml',
-              skipDays: typeof p.skip_days === 'string' ? JSON.parse(p.skip_days) : (p.skip_days || [])
+              skipDays: Array.isArray(p.skip_days) ? p.skip_days : 
+                (typeof p.skip_days === 'string' ? JSON.parse(p.skip_days) : []),
+              extraOrders: Array.isArray(p.extra_orders) ? p.extra_orders :
+                (typeof p.extra_orders === 'string' ? JSON.parse(p.extra_orders) : [])
             };
           });
         }
@@ -167,10 +170,39 @@ const DeliveryDashboard = () => {
 
       const data = await response.json();
       if (data.success) {
+        // ✅ Mark extra orders as delivered by clearing them from database
+        if (customer.extraOrders && customer.extraOrders.length > 0) {
+          try {
+            await fetch(`${API_URL}/customer-preferences/${customerId}`, {
+              method: 'POST',
+              headers: getAuthHeaders(),
+              body: JSON.stringify({
+                wantMilk: customer.preferences?.wantMilk ?? true,
+                quantity: customer.preferences?.quantity ?? 2,
+                packSize: customer.preferences?.packSize ?? '500ml',
+                skipDays: customer.preferences?.skipDays || [],
+                extraOrders: [] // ✅ Clear orders = delivered
+              })
+            });
+            console.log('✅ Extra orders cleared for customer:', customer.name);
+          } catch (e) {
+            console.log('Failed to clear extra orders:', e);
+          }
+        }
+
         setCustomers(prev => {
-          const updated = prev.map(c => c.id == customerId ? { ...c, delivered: true, deliveryData: { total_amount: totalAmount } } : c);
+          const updated = prev.map(c => c.id == customerId 
+            ? { ...c, delivered: true, deliveryData: { total_amount: totalAmount }, extraOrders: [] } 
+            : c);
           const done = updated.filter(c => c.delivered);
-          setTodayStats({ deliveries: done.length, collected: done.reduce((s, c) => s + (parseFloat(c.deliveryData?.total_amount) || 0), 0), pending: updated.filter(c => !c.delivered).length });
+          setTodayStats({ 
+            deliveries: done.length, 
+            collected: done.reduce((s, c) => s + (parseFloat(c.deliveryData?.total_amount) || 0), 0), 
+            pending: updated.filter(c => !c.delivered).length 
+          });
+          // Update extra orders count
+          const remainingOrders = updated.reduce((s, c) => s + (c.extraOrders?.length || 0), 0);
+          setExtraOrdersCount(remainingOrders);
           return updated;
         });
         showMessage('success', `✅ Delivered to ${customer.name}`);
