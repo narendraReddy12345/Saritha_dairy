@@ -5,6 +5,14 @@ import './Products.css';
 const API_URL = 'https://saritha-dairy-api.onrender.com/api';
 const BASE_URL = 'https://saritha-dairy-api.onrender.com';
 
+// ✅ Helper for image URLs - handles all formats
+const getImageUrl = (url) => {
+  if (!url) return null;
+  if (url.startsWith('http')) return url;
+  if (url.startsWith('/')) return `${BASE_URL}${url}`;
+  return `${BASE_URL}/${url}`;
+};
+
 const Products = () => {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -13,7 +21,7 @@ const Products = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [showToast, setShowToast] = useState({ show: false, message: '', type: '' });
   const [submitting, setSubmitting] = useState(false);
-  const [viewMode, setViewMode] = useState('grid'); // 'grid' or 'list'
+  const [viewMode, setViewMode] = useState('grid');
   
   const [formData, setFormData] = useState({
     name: '',
@@ -184,7 +192,7 @@ const Products = () => {
       name: product.name,
       packs: packs,
       image: null,
-      imagePreview: product.image_url ? `${BASE_URL}${product.image_url}` : ''
+      imagePreview: getImageUrl(product.image_url) // ✅ FIXED
     });
     setShowAddModal(true);
   };
@@ -300,17 +308,23 @@ const Products = () => {
         <div className="products-grid">
           {filteredProducts.map(product => {
             const packs = formatPacks(product.packs);
-            const imageUrl = product.image_url ? `${BASE_URL}${product.image_url}` : null;
+            const imageUrl = getImageUrl(product.image_url); // ✅ FIXED
             const color = getProductColor(product.name);
             
             return (
               <div key={product.id} className="product-card">
                 <div className="product-card-image" style={{ background: color.grad }}>
                   {imageUrl ? (
-                    <img src={imageUrl} alt={product.name} onError={(e) => { e.target.style.display = 'none'; }} />
-                  ) : (
-                    <span className="product-card-icon">{getProductIcon(product.name)}</span>
-                  )}
+                    <img src={imageUrl} alt={product.name} 
+                      onError={(e) => { 
+                        e.target.style.display = 'none'; 
+                        e.target.nextElementSibling.style.display = 'flex';
+                      }} 
+                    />
+                  ) : null}
+                  <span className="product-card-icon" style={{ display: imageUrl ? 'none' : 'flex' }}>
+                    {getProductIcon(product.name)}
+                  </span>
                   <div className="product-card-overlay">
                     <button onClick={() => handleEdit(product)} className="overlay-btn edit" title="Edit">✏️</button>
                     <button onClick={() => handleDelete(product.id, product.name)} className="overlay-btn delete" title="Delete">🗑️</button>
@@ -336,14 +350,16 @@ const Products = () => {
         <div className="products-list">
           {filteredProducts.map(product => {
             const packs = formatPacks(product.packs);
-            const imageUrl = product.image_url ? `${BASE_URL}${product.image_url}` : null;
+            const imageUrl = getImageUrl(product.image_url); // ✅ FIXED
             const color = getProductColor(product.name);
             
             return (
               <div key={product.id} className="product-list-item">
                 <div className="list-item-image" style={{ background: color.bg }}>
                   {imageUrl ? (
-                    <img src={imageUrl} alt={product.name} onError={(e) => { e.target.style.display = 'none'; }} />
+                    <img src={imageUrl} alt={product.name} 
+                      onError={(e) => { e.target.style.display = 'none'; }} 
+                    />
                   ) : (
                     <span>{getProductIcon(product.name)}</span>
                   )}

@@ -46,7 +46,6 @@ const DeliveryDashboard = () => {
     const boyId = userData?.id;
 
     try {
-      // Load assigned customers
       const custRes = await fetch(`${API_URL}/delivery-boys/${boyId}/customers`, {
         headers: getAuthHeaders()
       });
@@ -59,7 +58,6 @@ const DeliveryDashboard = () => {
 
       const custData = await custRes.json();
       
-      // Load today's deliveries
       const todayRes = await fetch(`${API_URL}/delivery/today/${boyId}`, { headers: getAuthHeaders() });
       const todayData = await todayRes.json();
       const todayDeliveries = todayData.success ? todayData.data : [];
@@ -81,9 +79,21 @@ const DeliveryDashboard = () => {
             };
           });
         }
-      } catch (e) {
-        console.log('Preferences not available yet');
-      }
+      } catch (e) { console.log('Preferences not available'); }
+
+      // ✅ Load customer extra orders
+      let extraOrdersMap = {};
+      try {
+        const ordersRes = await fetch(`${API_URL}/customer-preferences/extra-orders/all`, {
+          headers: getAuthHeaders()
+        });
+        const ordersData = await ordersRes.json();
+        if (ordersData.success && ordersData.data) {
+          ordersData.data.forEach(o => {
+            extraOrdersMap[o.customerId] = o.orders;
+          });
+        }
+      } catch (e) { console.log('Extra orders not available'); }
 
       if (custData.success && custData.data) {
         const enriched = custData.data.map(c => {
@@ -94,7 +104,8 @@ const DeliveryDashboard = () => {
             delivered: deliveredToday, 
             deliveryData: deliveryInfo || null, 
             products: c.products || [],
-            preferences: preferencesMap[c.id] || { wantMilk: true, quantity: 2, packSize: '500ml', skipDays: [] }
+            preferences: preferencesMap[c.id] || { wantMilk: true, quantity: 2, packSize: '500ml', skipDays: [] },
+            extraOrders: extraOrdersMap[c.id] || [] // ✅ Extra orders
           };
         });
 
@@ -122,7 +133,6 @@ const DeliveryDashboard = () => {
     const customer = customers.find(c => c.id == customerId);
     if (!customer || deliveringId) return;
 
-    // ✅ Block delivery if paused or skip day
     if (isPaused(customer)) {
       showMessage('error', `⚠️ ${customer.name} has PAUSED milk delivery! Do NOT deliver.`);
       return;
@@ -208,19 +218,14 @@ const DeliveryDashboard = () => {
     return 'linear-gradient(135deg, #f5f5f5, #eeeeee)';
   };
 
-  // ✅ Check if customer paused milk
-  const isPaused = (customer) => {
-    return customer.preferences && customer.preferences.wantMilk === false;
-  };
+  const isPaused = (customer) => customer.preferences && customer.preferences.wantMilk === false;
 
-  // ✅ Get customer milk quantity display
   const getMilkQuantity = (customer) => {
     if (!customer.preferences) return '';
     if (!customer.preferences.wantMilk) return '⏸️ Paused';
     return `${customer.preferences.quantity || 2} × ${customer.preferences.packSize || '500ml'}`;
   };
 
-  // ✅ Check if today is a skip day
   const isSkipDay = (customer) => {
     if (!customer.preferences?.skipDays?.length) return false;
     const today = new Date().toLocaleDateString('en-US', { weekday: 'short' });
@@ -244,9 +249,7 @@ const DeliveryDashboard = () => {
     const grouped = {};
     filteredCustomers.forEach(c => {
       const apt = c.apartment || 'Other';
-      if (!grouped[apt]) {
-        grouped[apt] = { name: apt, customers: [], totalAmount: 0, completedCount: 0, pendingCount: 0, flats: [] };
-      }
+      if (!grouped[apt]) grouped[apt] = { name: apt, customers: [], totalAmount: 0, completedCount: 0, pendingCount: 0, flats: [] };
       const products = c.products || [];
       const customerTotal = products.reduce((s, p) => s + ((p.price || 0) * (p.quantity || p.quantity_per_day || 1)), 0);
       grouped[apt].customers.push(c);
@@ -272,7 +275,6 @@ const DeliveryDashboard = () => {
 
   return (
     <div className={`dd-pro-app ${greeting.timeOfDay}`}>
-      {/* Toast */}
       {message && (
         <div className={`dd-pro-toast ${message.type}`}>
           <span>{message.text}</span>
@@ -284,9 +286,7 @@ const DeliveryDashboard = () => {
       <div className="dd-pro-header">
         <div className="dd-pro-header-left">
           <div className="dd-pro-avatar-wrapper" onClick={() => setShowProfile(!showProfile)}>
-            <div className="dd-pro-avatar">
-              {userData?.name?.charAt(0)?.toUpperCase() || 'D'}
-            </div>
+            <div className="dd-pro-avatar">{userData?.name?.charAt(0)?.toUpperCase() || 'D'}</div>
             <div className="dd-pro-avatar-ring" style={{ background: `conic-gradient(#4caf50 ${progressPercent * 3.6}deg, #e0e0e0 ${progressPercent * 3.6}deg)` }}></div>
           </div>
           <div>
@@ -302,7 +302,6 @@ const DeliveryDashboard = () => {
         </div>
       </div>
 
-      {/* Profile Popup */}
       {showProfile && (
         <div className="dd-pro-profile-card">
           <div className="dd-pro-profile-top">
@@ -319,93 +318,52 @@ const DeliveryDashboard = () => {
         </div>
       )}
 
-      {/* Main Stats Card */}
       <div className="dd-pro-main-card">
         <div className="dd-pro-main-card-header">
-          <div>
-            <h3>Today's Route</h3>
-            <p>{new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'short' })}</p>
-          </div>
+          <div><h3>Today's Route</h3><p>{new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'short' })}</p></div>
           <div className="dd-pro-progress-circle">
             <svg viewBox="0 0 60 60">
               <circle cx="30" cy="30" r="25" fill="none" stroke="#e0e0e0" strokeWidth="6" />
-              <circle cx="30" cy="30" r="25" fill="none" stroke="#4caf50" strokeWidth="6"
-                strokeDasharray={`${progressPercent * 1.57} 157`} strokeLinecap="round"
-                transform="rotate(-90 30 30)" />
+              <circle cx="30" cy="30" r="25" fill="none" stroke="#4caf50" strokeWidth="6" strokeDasharray={`${progressPercent * 1.57} 157`} strokeLinecap="round" transform="rotate(-90 30 30)" />
             </svg>
             <span className="dd-pro-progress-text">{progressPercent}%</span>
           </div>
         </div>
-
         <div className="dd-pro-stats-row">
-          <div className="dd-pro-stat-item">
-            <div className="dd-pro-stat-icon" style={{background: '#f0fdf4'}}>📦</div>
-            <span className="dd-pro-stat-value">{customers.length}</span>
-            <span className="dd-pro-stat-label">Total</span>
-          </div>
-          <div className="dd-pro-stat-item">
-            <div className="dd-pro-stat-icon" style={{background: '#fff3e0'}}>⏳</div>
-            <span className="dd-pro-stat-value">{todayStats.pending}</span>
-            <span className="dd-pro-stat-label">Pending</span>
-          </div>
-          <div className="dd-pro-stat-item">
-            <div className="dd-pro-stat-icon" style={{background: '#e8f5e9'}}>✅</div>
-            <span className="dd-pro-stat-value">{todayStats.deliveries}</span>
-            <span className="dd-pro-stat-label">Done</span>
-          </div>
-          <div className="dd-pro-stat-item">
-            <div className="dd-pro-stat-icon" style={{background: '#e3f2fd'}}>💰</div>
-            <span className="dd-pro-stat-value">₹{todayStats.collected}</span>
-            <span className="dd-pro-stat-label">Cash</span>
-          </div>
+          <div className="dd-pro-stat-item"><div className="dd-pro-stat-icon" style={{background:'#f0fdf4'}}>📦</div><span className="dd-pro-stat-value">{customers.length}</span><span className="dd-pro-stat-label">Total</span></div>
+          <div className="dd-pro-stat-item"><div className="dd-pro-stat-icon" style={{background:'#fff3e0'}}>⏳</div><span className="dd-pro-stat-value">{todayStats.pending}</span><span className="dd-pro-stat-label">Pending</span></div>
+          <div className="dd-pro-stat-item"><div className="dd-pro-stat-icon" style={{background:'#e8f5e9'}}>✅</div><span className="dd-pro-stat-value">{todayStats.deliveries}</span><span className="dd-pro-stat-label">Done</span></div>
+          <div className="dd-pro-stat-item"><div className="dd-pro-stat-icon" style={{background:'#e3f2fd'}}>💰</div><span className="dd-pro-stat-value">₹{todayStats.collected}</span><span className="dd-pro-stat-label">Cash</span></div>
         </div>
-
         <div className="dd-pro-bar-wrapper">
           <div className="dd-pro-bar">
-            <div className="dd-pro-bar-fill" style={{ width: `${progressPercent}%` }}>
-              {progressPercent > 0 && <span className="dd-pro-bar-emoji">🛵</span>}
-            </div>
+            <div className="dd-pro-bar-fill" style={{ width: `${progressPercent}%` }}>{progressPercent > 0 && <span className="dd-pro-bar-emoji">🛵</span>}</div>
           </div>
         </div>
       </div>
 
-      {/* Quick Actions */}
       <div className="dd-pro-quick-actions">
-        <button className="dd-pro-quick-btn" onClick={() => setActiveTab('pending')}>
-          <span>🚀</span> Start Delivery
-        </button>
-        <button className="dd-pro-quick-btn" onClick={() => window.open('https://maps.google.com', '_blank')}>
-          <span>🗺️</span> View Route
-        </button>
+        <button className="dd-pro-quick-btn" onClick={() => setActiveTab('pending')}><span>🚀</span> Start Delivery</button>
+        <button className="dd-pro-quick-btn" onClick={() => window.open('https://maps.google.com', '_blank')}><span>🗺️</span> View Route</button>
       </div>
 
-      {/* Search */}
       <div className="dd-pro-search">
         <span>🔍</span>
         <input type="text" placeholder="Search customers, apartments..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
         {searchTerm && <button onClick={() => setSearchTerm('')}>×</button>}
       </div>
 
-      {/* Tabs */}
       <div className="dd-pro-tabs">
-        <button className={`dd-pro-tab ${activeTab === 'pending' ? 'active' : ''}`} onClick={() => setActiveTab('pending')}>
-          ⏳ Pending ({pendingCustomers.length})
-        </button>
-        <button className={`dd-pro-tab ${activeTab === 'completed' ? 'active' : ''}`} onClick={() => setActiveTab('completed')}>
-          ✅ Done ({completedCustomers.length})
-        </button>
+        <button className={`dd-pro-tab ${activeTab === 'pending' ? 'active' : ''}`} onClick={() => setActiveTab('pending')}>⏳ Pending ({pendingCustomers.length})</button>
+        <button className={`dd-pro-tab ${activeTab === 'completed' ? 'active' : ''}`} onClick={() => setActiveTab('completed')}>✅ Done ({completedCustomers.length})</button>
       </div>
 
-      {/* Apartment Grouped View */}
       <div className="dd-pro-customer-list">
         {apartmentGroups.length === 0 ? (
           <div className="dd-pro-empty">
-            <div className="dd-pro-empty-animation">
-              <span>{activeTab === 'pending' ? '🎉' : '📭'}</span>
-              <div className="dd-pro-empty-ripple"></div>
-            </div>
+            <div className="dd-pro-empty-animation"><span>{activeTab === 'pending' ? '🎉' : '📭'}</span><div className="dd-pro-empty-ripple"></div></div>
             <h3>{activeTab === 'pending' ? 'All Caught Up!' : 'No Deliveries'}</h3>
-            <p>{activeTab === 'pending' ? 'Great job! Time for a break ☕' : 'Start your deliveries to see history'}</p>
+            <p>{activeTab === 'pending' ? 'Great job! ☕' : 'Start your deliveries'}</p>
           </div>
         ) : (
           apartmentGroups.map((group, groupIndex) => {
@@ -414,36 +372,25 @@ const DeliveryDashboard = () => {
             const allDone = group.pendingCount === 0;
 
             return (
-              <div key={group.name} className={`dd-pro-apt-building ${isExpanded ? 'expanded' : ''} ${allDone ? 'completed' : ''}`}
-                style={{ animationDelay: `${groupIndex * 0.05}s` }}>
-                
-                <div className="dd-pro-building-header" onClick={() => setExpandedApt(isExpanded ? null : group.name)}
-                  style={{ background: getApartmentGradient(group) }}>
-                  
+              <div key={group.name} className={`dd-pro-apt-building ${isExpanded ? 'expanded' : ''} ${allDone ? 'completed' : ''}`} style={{ animationDelay: `${groupIndex * 0.05}s` }}>
+                <div className="dd-pro-building-header" onClick={() => setExpandedApt(isExpanded ? null : group.name)} style={{ background: getApartmentGradient(group) }}>
                   <div className="dd-pro-building-icon-wrapper">
                     <span className="dd-pro-building-icon">{getApartmentIcon(group.name)}</span>
                     {!allDone && group.pendingCount > 0 && <span className="dd-pro-building-pulse"></span>}
                   </div>
-                  
                   <div className="dd-pro-building-info">
-                    <div className="dd-pro-building-name-row">
-                      <h3>{group.name}</h3>
-                      <span className={`dd-pro-building-status ${allDone ? 'done' : 'active'}`}>{allDone ? '✅' : '🟢'}</span>
-                    </div>
+                    <div className="dd-pro-building-name-row"><h3>{group.name}</h3><span className={`dd-pro-building-status ${allDone ? 'done' : 'active'}`}>{allDone ? '✅' : '🟢'}</span></div>
                     <div className="dd-pro-building-stats-row">
-                      <span className="dd-pro-building-stat">📦 {group.customers.length} deliveries</span>
-                      <span className="dd-pro-building-stat">⏳ {group.pendingCount} pending</span>
+                      <span className="dd-pro-building-stat">📦 {group.customers.length}</span>
+                      <span className="dd-pro-building-stat">⏳ {group.pendingCount}</span>
                       <span className="dd-pro-building-stat">💰 ₹{group.totalAmount}</span>
                     </div>
                   </div>
-
                   <div className="dd-pro-building-right">
                     <div className="dd-pro-mini-progress">
                       <svg viewBox="0 0 44 44">
                         <circle cx="22" cy="22" r="18" fill="none" stroke="#e0e0e0" strokeWidth="3" />
-                        <circle cx="22" cy="22" r="18" fill="none" stroke={allDone ? '#4caf50' : '#ff9800'} strokeWidth="3"
-                          strokeDasharray={`${completionPercent * 1.13} 113`} strokeLinecap="round"
-                          transform="rotate(-90 22 22)" />
+                        <circle cx="22" cy="22" r="18" fill="none" stroke={allDone ? '#4caf50' : '#ff9800'} strokeWidth="3" strokeDasharray={`${completionPercent * 1.13} 113`} strokeLinecap="round" transform="rotate(-90 22 22)" />
                       </svg>
                       <span className="dd-pro-mini-percent">{completionPercent}%</span>
                     </div>
@@ -451,7 +398,6 @@ const DeliveryDashboard = () => {
                   </div>
                 </div>
 
-                {/* ✅ Customer List with Preferences - BLOCKED delivery for paused/skip */}
                 {isExpanded && (
                   <div className="dd-pro-simple-list-container">
                     {group.customers.map((customer, index) => {
@@ -464,7 +410,6 @@ const DeliveryDashboard = () => {
                       
                       return (
                         <div key={customer.id} className={`dd-pro-list-row ${customer.delivered ? 'done' : ''} ${paused ? 'paused' : ''} ${skipDay ? 'skip' : ''}`}>
-                          {/* Left: Name & Address */}
                           <div className="dd-pro-list-left">
                             <div className="dd-pro-list-avatar" style={{ background: paused ? '#ef4444' : skipDay ? '#f59e0b' : customer.delivered ? '#4caf50' : '#667eea' }}>
                               {customer.name?.charAt(0)?.toUpperCase()}
@@ -476,80 +421,46 @@ const DeliveryDashboard = () => {
                                 {skipDay && !paused && <span className="dd-pro-skip-badge">🚫 Skip Today</span>}
                               </h4>
                               <p>🚪 {customer.flat_no || 'N/A'}, {customer.apartment}</p>
-                              {/* ✅ Show Milk Preference */}
-                              {milkQty && (
-                                <p className="dd-pro-milk-pref">
-                                  🥛 {milkQty}
-                                </p>
+                              {milkQty && <p className="dd-pro-milk-pref">🥛 {milkQty}</p>}
+                              
+                              {/* ✅ EXTRA ORDERS */}
+                              {customer.extraOrders && customer.extraOrders.length > 0 && (
+                                <div className="dd-pro-extra-orders">
+                                  <span className="dd-pro-extra-label">📦 Orders:</span>
+                                  {customer.extraOrders.map((order, i) => (
+                                    <span key={i} className="dd-pro-extra-tag">
+                                      {order.productName} ({order.packSize}) ×{order.quantity}
+                                    </span>
+                                  ))}
+                                </div>
                               )}
                             </div>
                           </div>
 
-                          {/* Center: Product or Warning */}
                           <div className="dd-pro-list-center">
                             {shouldBlockDelivery ? (
-                              <span className="dd-pro-list-warning">
-                                {paused ? '⏸️ Milk Paused' : '🚫 Skip Day'}
-                              </span>
+                              <span className="dd-pro-list-warning">{paused ? '⏸️ Milk Paused' : '🚫 Skip Day'}</span>
                             ) : (
                               <span className="dd-pro-list-product">{productDisplay}</span>
                             )}
                           </div>
 
-                          {/* Right: Status & Actions */}
                           <div className="dd-pro-list-right">
                             <div className="dd-pro-list-status-row">
-                              {paused ? (
-                                <span className="dd-pro-list-status paused">⏸️ Paused</span>
-                              ) : skipDay ? (
-                                <span className="dd-pro-list-status skip">🚫 Skip</span>
-                              ) : customer.delivered ? (
-                                <span className="dd-pro-list-status done">✅ Done</span>
-                              ) : (
-                                <span className="dd-pro-list-status pending">⏳ Pending</span>
-                              )}
+                              {paused ? <span className="dd-pro-list-status paused">⏸️ Paused</span> :
+                               skipDay ? <span className="dd-pro-list-status skip">🚫 Skip</span> :
+                               customer.delivered ? <span className="dd-pro-list-status done">✅ Done</span> :
+                               <span className="dd-pro-list-status pending">⏳ Pending</span>}
                             </div>
                             <div className="dd-pro-list-action-row">
                               <a href={`tel:${customer.phone}`} className="dd-pro-list-icon-btn" title="Call">📞</a>
-                              <button 
-                                onClick={() => {
-                                  const addr = [customer.apartment, customer.flat_no, customer.area, 'Hyderabad'].filter(Boolean).join(', ');
-                                  window.open(`https://maps.google.com/?q=${encodeURIComponent(addr)}`, '_blank');
-                                }}
-                                className="dd-pro-list-icon-btn" title="Directions">🗺️</button>
-                              
-                              {/* ✅ BLOCKED: Paused or Skip Day - Show 🚫 instead of ✓ */}
+                              <button onClick={() => { const addr = [customer.apartment, customer.flat_no, customer.area, 'Hyderabad'].filter(Boolean).join(', '); window.open(`https://maps.google.com/?q=${encodeURIComponent(addr)}`, '_blank'); }} className="dd-pro-list-icon-btn" title="Directions">🗺️</button>
                               {shouldBlockDelivery && !customer.delivered ? (
-                                <button 
-                                  onClick={() => {
-                                    if (paused) {
-                                      showMessage('error', `⚠️ ${customer.name} has PAUSED milk delivery! Do NOT deliver.`);
-                                    } else if (skipDay) {
-                                      showMessage('error', `⚠️ Today is SKIP DAY for ${customer.name}! Do NOT deliver.`);
-                                    }
-                                  }}
-                                  className="dd-pro-list-blocked-btn"
-                                  title={paused ? 'Milk is paused - DO NOT DELIVER' : 'Skip day today - DO NOT DELIVER'}
-                                >
-                                  🚫
-                                </button>
+                                <button onClick={() => { if (paused) showMessage('error', `⚠️ ${customer.name} has PAUSED milk!`); else showMessage('error', `⚠️ Skip day for ${customer.name}!`); }} className="dd-pro-list-blocked-btn" title="DO NOT DELIVER">🚫</button>
                               ) : !customer.delivered ? (
-                                <button 
-                                  onClick={() => markDelivered(customer.id)} 
-                                  className="dd-pro-list-deliver-btn"
-                                  disabled={deliveringId === customer.id}
-                                  title="Mark as Delivered"
-                                >
-                                  {deliveringId === customer.id ? '⏳' : '✓'}
-                                </button>
+                                <button onClick={() => markDelivered(customer.id)} className="dd-pro-list-deliver-btn" disabled={deliveringId === customer.id}>{deliveringId === customer.id ? '⏳' : '✓'}</button>
                               ) : (
-                                <button 
-                                  onClick={() => undoDelivery(customer.id)} 
-                                  className="dd-pro-list-undo-btn"
-                                  title="Undo Delivery"
-                                >
-                                  ↩
-                                </button>
+                                <button onClick={() => undoDelivery(customer.id)} className="dd-pro-list-undo-btn" title="Undo">↩</button>
                               )}
                             </div>
                           </div>
@@ -563,7 +474,6 @@ const DeliveryDashboard = () => {
           })
         )}
       </div>
-
       <div style={{ height: '100px' }}></div>
     </div>
   );

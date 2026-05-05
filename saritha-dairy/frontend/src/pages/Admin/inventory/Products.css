@@ -509,3 +509,18 @@
   .product-card-image { height: 140px; }
   .product-card-icon { font-size: 40px; }
 }
+/* ✅ Show full image clearly */
+.cst-magic-card-img img,
+.product-card-image img,
+.list-item-image img,
+.cst-modal-hero-img img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;  /* ✅ Shows full image without cropping */
+  background: #f8fafc;  /* Light background for transparent areas */
+}
+
+/* If you want COVER mode (fills but may crop) */
+.object-cover {
+  object-fit: cover;  /* Fills container but may crop edges */
+}
