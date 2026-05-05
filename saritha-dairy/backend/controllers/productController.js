@@ -1,41 +1,66 @@
 const pool = require('../config/db');
-const cloudinary = require('cloudinary').v2;
-const { CloudinaryStorage } = require('multer-storage-cloudinary');
-const multer = require('multer');
 
-// ✅ Configure Cloudinary
-cloudinary.config({
-  cloud_name: 'dzuixvh7w',
-  api_key: process.env.CLOUDINARY_API_KEY || '518573852955247',
-  api_secret: process.env.CLOUDINARY_API_SECRET || 'YOUR_API_SECRET'
-});
+// ✅ Try to set up Cloudinary, fallback to local if not available
+let cloudinary = null;
+let CloudinaryStorage = null;
+let upload = null;
 
-// ✅ Cloudinary storage - stores FULL images clearly
-const storage = new CloudinaryStorage({
-  cloudinary: cloudinary,
-  params: {
-    folder: 'saritha_dairy_products',
-    allowed_formats: ['jpg', 'jpeg', 'png', 'webp'],
-    transformation: [
-      { 
-        width: 600,           // ✅ Fixed width
-        height: 600,          // ✅ Fixed height
-        crop: 'fit',          // ✅ FIT mode - shows full image, no cropping
-        quality: 'auto:best', // ✅ Best quality
-        fetch_format: 'auto',
-        background: 'auto'    // ✅ Auto background for transparent images
-      }
-    ]
+try {
+  cloudinary = require('cloudinary').v2;
+  CloudinaryStorage = require('multer-storage-cloudinary').CloudinaryStorage;
+  
+  cloudinary.config({
+    cloud_name: 'dzuixvh7w',
+    api_key: process.env.CLOUDINARY_API_KEY || '518573852955247',
+    api_secret: process.env.CLOUDINARY_API_SECRET || ''
+  });
+  
+  const storage = new CloudinaryStorage({
+    cloudinary: cloudinary,
+    params: {
+      folder: 'saritha_dairy_products',
+      allowed_formats: ['jpg', 'jpeg', 'png', 'webp'],
+    }
+  });
+  
+  const multer = require('multer');
+  upload = multer({ storage, limits: { fileSize: 10 * 1024 * 1024 } });
+  console.log('✅ Cloudinary configured successfully');
+} catch (error) {
+  console.log('⚠️ Cloudinary not available, using local storage:', error.message);
+  
+  // ✅ Fallback to local storage
+  const multer = require('multer');
+  const path = require('path');
+  const fs = require('fs');
+  
+  // Ensure uploads folder exists
+  const uploadsDir = path.join(__dirname, '..', 'uploads');
+  if (!fs.existsSync(uploadsDir)) {
+    fs.mkdirSync(uploadsDir, { recursive: true });
   }
-});
+  
+  const storage = multer.diskStorage({
+    destination: uploadsDir,
+    filename: (req, file, cb) => cb(null, Date.now() + '-' + file.originalname.replace(/\s+/g, '_'))
+  });
+  
+  upload = multer({ storage, limits: { fileSize: 10 * 1024 * 1024 } });
+}
 
-const upload = multer({ 
-  storage: storage,
-  limits: { fileSize: 10 * 1024 * 1024 } // ✅ Increased to 10MB for high quality
-});
-
-// ✅ Export multer middleware
-exports.uploadImage = upload.single('image');
+// ✅ Export multer middleware (works for both Cloudinary and local)
+exports.uploadImage = (req, res, next) => {
+  if (!upload) {
+    return res.status(500).json({ success: false, error: 'Upload not configured' });
+  }
+  upload.single('image')(req, res, (err) => {
+    if (err) {
+      console.error('❌ Upload error:', err);
+      return res.status(400).json({ success: false, error: err.message });
+    }
+    next();
+  });
+};
 
 // Get all products
 exports.getAll = async (req, res) => {
@@ -53,8 +78,11 @@ exports.getAll = async (req, res) => {
 exports.create = async (req, res) => {
   const { name, packs } = req.body;
   
-  // ✅ Image URL from Cloudinary (permanent URL)
-  const image_url = req.file ? req.file.path : null;
+  // ✅ Get image URL (Cloudinary returns path, local returns filename)
+  let image_url = null;
+  if (req.file) {
+    image_url = req.file.path || `/uploads/${req.file.filename}`;
+  }
   
   console.log('📸 Creating product:', { name, image_url });
   
@@ -78,26 +106,11 @@ exports.update = async (req, res) => {
   const { name, packs } = req.body;
   
   try {
-    let image_url;
+    let image_url = null;
     
     if (req.file) {
-      // ✅ New image uploaded to Cloudinary
-      image_url = req.file.path;
+      image_url = req.file.path || `/uploads/${req.file.filename}`;
       console.log('📸 New image:', image_url);
-      
-      // Delete old image from Cloudinary if exists
-      const oldProduct = await pool.query('SELECT image_url FROM products WHERE id = $1', [id]);
-      if (oldProduct.rows[0]?.image_url && oldProduct.rows[0].image_url.includes('cloudinary')) {
-        try {
-          const urlParts = oldProduct.rows[0].image_url.split('/');
-          const filename = urlParts[urlParts.length - 1].split('.')[0];
-          const publicId = `saritha_dairy_products/${filename}`;
-          await cloudinary.uploader.destroy(publicId);
-          console.log('🗑️ Old image deleted from Cloudinary');
-        } catch (e) { 
-          console.log('Old image cleanup failed:', e.message); 
-        }
-      }
     }
     
     let query, params;
@@ -132,19 +145,6 @@ exports.remove = async (req, res) => {
     
     if (product.rows.length === 0) {
       return res.status(404).json({ success: false, error: 'Product not found' });
-    }
-    
-    // Delete image from Cloudinary
-    if (product.rows[0].image_url && product.rows[0].image_url.includes('cloudinary')) {
-      try {
-        const urlParts = product.rows[0].image_url.split('/');
-        const filename = urlParts[urlParts.length - 1].split('.')[0];
-        const publicId = `saritha_dairy_products/${filename}`;
-        await cloudinary.uploader.destroy(publicId);
-        console.log('🗑️ Image deleted from Cloudinary');
-      } catch (e) { 
-        console.log('Image cleanup failed:', e.message); 
-      }
     }
     
     await pool.query('DELETE FROM products WHERE id = $1', [id]);
