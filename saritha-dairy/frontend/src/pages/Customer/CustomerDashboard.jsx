@@ -70,16 +70,14 @@ const CustomerDashboard = () => {
   }, [confetti]);
 
   // ✅ Helper to parse JSON safely
-  const safeParse = (data, fallback = []) => {
-    if (!data) return fallback;
+  const safeParseArray = (data) => {
+    if (!data) return [];
     if (Array.isArray(data)) return data;
     if (typeof data === 'string') {
-      try { 
-        const parsed = JSON.parse(data);
-        return Array.isArray(parsed) ? parsed : fallback;
-      } catch (e) { return fallback; }
+      try { const p = JSON.parse(data); return Array.isArray(p) ? p : []; } 
+      catch (e) { return []; }
     }
-    return fallback;
+    return [];
   };
 
   const fetchAllProducts = async () => {
@@ -97,145 +95,97 @@ const CustomerDashboard = () => {
     } catch (e) { console.error('Error fetching products:', e); }
   };
 
-  // ✅ Save orders to database
-  const saveOrdersToDB = async (orders) => {
-    try {
-      await fetch(`${API_URL}/customer-preferences/${userData.id}`, {
-        method: 'POST',
-        headers: getAuthHeaders(),
-        body: JSON.stringify({ 
-          wantMilk: preferences.wantMilk,
-          quantity: preferences.quantity,
-          packSize: preferences.packSize,
-          skipDays: preferences.skipDays || [],
-          extraOrders: orders || [] 
-        })
-      });
-    } catch (error) {
-      console.error('Failed to save orders to DB:', error);
-    }
-  };
-
-  // ✅ Fallback to localStorage
-  const loadFromLocalStorage = () => {
-    const savedPrefs = localStorage.getItem(`milkPrefs_${userData.id}`);
-    if (savedPrefs) {
-      try {
-        const prefs = JSON.parse(savedPrefs);
-        setPreferences({
-          wantMilk: prefs.wantMilk ?? true,
-          quantity: prefs.quantity ?? 2,
-          packSize: prefs.packSize ?? '500ml',
-          skipDays: Array.isArray(prefs.skipDays) ? prefs.skipDays : []
-        });
-      } catch (e) {}
-    }
-    
-    const savedOrders = localStorage.getItem(`extraOrders_${userData.id}`);
-    if (savedOrders) {
-      try {
-        const orders = JSON.parse(savedOrders);
-        if (Array.isArray(orders)) {
-          setExtraOrders(orders.map(o => ({
-            ...o,
-            imageUrl: getImageUrl(o.imageUrl) || o.imageUrl
-          })));
-        }
-      } catch (e) {}
-    }
-  };
-
-  // ✅ FIXED: Load preferences with proper parsing
   const loadCustomerData = async () => {
     try {
       const res = await fetch(`${API_URL}/admin/customer-deliveries/${userData.id}`, { headers: getAuthHeaders() });
       const data = await res.json();
       if (data.success) setDeliveries(data.deliveries || []);
       
+      // ✅ Load preferences from API FIRST (don't fallback to localStorage if API works)
+      let loadedFromAPI = false;
       try {
-        console.log('📡 Fetching preferences from API...');
         const prefRes = await fetch(`${API_URL}/customer-preferences/${userData.id}`, { headers: getAuthHeaders() });
         const prefData = await prefRes.json();
         
-        console.log('📦 API Response:', prefData);
-        
         if (prefData.success && prefData.data) {
-          // ✅ Parse skipDays properly
-          const skipDays = safeParse(prefData.data.skip_days, []);
-          // ✅ Parse extra_orders properly
-          const orders = safeParse(prefData.data.extra_orders, []);
-          
-          console.log('🔄 Parsed skipDays:', skipDays);
-          console.log('🔄 Parsed orders count:', orders.length);
-          
-          // ✅ Set preferences with parsed values
-          const newPrefs = {
+          loadedFromAPI = true;
+          const apiPrefs = {
             wantMilk: prefData.data.want_milk ?? true,
             quantity: prefData.data.quantity ?? 2,
             packSize: prefData.data.pack_size ?? '500ml',
-            skipDays: skipDays
+            skipDays: safeParseArray(prefData.data.skip_days)
           };
-          setPreferences(newPrefs);
           
-          // Save parsed prefs to localStorage
-          localStorage.setItem(`milkPrefs_${userData.id}`, JSON.stringify(newPrefs));
+          console.log('✅ Loaded from API:', apiPrefs);
+          setPreferences(apiPrefs);
+          localStorage.setItem(`milkPrefs_${userData.id}`, JSON.stringify(apiPrefs));
           
-          // Set orders
+          // Load orders from API
+          const orders = safeParseArray(prefData.data.extra_orders);
           if (orders.length > 0) {
-            const fixedOrders = orders.map(o => ({
-              ...o,
-              imageUrl: getImageUrl(o.imageUrl) || o.imageUrl
-            }));
+            const fixedOrders = orders.map(o => ({ ...o, imageUrl: getImageUrl(o.imageUrl) || o.imageUrl }));
             setExtraOrders(fixedOrders);
             localStorage.setItem(`extraOrders_${userData.id}`, JSON.stringify(fixedOrders));
           }
-        } else {
-          console.log('⚠️ No preferences in DB, checking localStorage');
-          loadFromLocalStorage();
         }
-      } catch (e) {
-        console.log('❌ API failed:', e.message);
-        loadFromLocalStorage();
+      } catch (e) { console.log('API failed:', e.message); }
+      
+      // ✅ ONLY use localStorage if API failed
+      if (!loadedFromAPI) {
+        const savedPrefs = localStorage.getItem(`milkPrefs_${userData.id}`);
+        if (savedPrefs) {
+          try { 
+            const p = JSON.parse(savedPrefs);
+            setPreferences({
+              wantMilk: p.wantMilk ?? true,
+              quantity: p.quantity ?? 2,
+              packSize: p.packSize ?? '500ml',
+              skipDays: Array.isArray(p.skipDays) ? p.skipDays : []
+            });
+          } catch (e) {}
+        }
+        const savedOrders = localStorage.getItem(`extraOrders_${userData.id}`);
+        if (savedOrders) {
+          const orders = safeParseArray(savedOrders);
+          setExtraOrders(orders.map(o => ({ ...o, imageUrl: getImageUrl(o.imageUrl) || o.imageUrl })));
+        }
       }
     } catch (error) { console.error('Error:', error); }
     setLoading(false);
   };
 
-  // ✅ FIXED: Save preferences with ALL fields
+  // ✅ FIXED: Save preferences - updates state FIRST, then saves
   const savePreferences = async (newPrefs) => {
-    console.log('💾 Saving preferences:', newPrefs);
+    console.log('💾 SAVING:', JSON.stringify(newPrefs));
     
-    // Update state immediately
+    // ✅ Update state IMMEDIATELY
     setPreferences(newPrefs); 
     setSaving(true);
     
-    // Save to localStorage as backup
-    localStorage.setItem(`milkPrefs_${userData.id}`, JSON.stringify(newPrefs));
+    // ✅ Save to localStorage
+    const cleanPrefs = {
+      wantMilk: newPrefs.wantMilk,
+      quantity: newPrefs.quantity,
+      packSize: newPrefs.packSize,
+      skipDays: newPrefs.skipDays || []
+    };
+    localStorage.setItem(`milkPrefs_${userData.id}`, JSON.stringify(cleanPrefs));
     
-    // ✅ Save to database with ALL fields
+    // ✅ Save to database
     try {
-      const payload = {
-        wantMilk: newPrefs.wantMilk,
-        quantity: newPrefs.quantity,
-        packSize: newPrefs.packSize,
-        skipDays: newPrefs.skipDays || [],
-        extraOrders: extraOrders || []
-      };
-      
-      console.log('📤 Sending to API:', payload);
-      
       const res = await fetch(`${API_URL}/customer-preferences/${userData.id}`, {
-        method: 'POST', 
-        headers: getAuthHeaders(),
-        body: JSON.stringify(payload)
+        method: 'POST', headers: getAuthHeaders(),
+        body: JSON.stringify({ 
+          wantMilk: cleanPrefs.wantMilk,
+          quantity: cleanPrefs.quantity,
+          packSize: cleanPrefs.packSize,
+          skipDays: cleanPrefs.skipDays,
+          extraOrders: extraOrders || []
+        })
       });
-      
       const data = await res.json();
-      console.log('✅ Save response:', data);
-      
-      if (data.success) {
-        showMessage('success', '✅ Preferences saved!');
-      }
+      console.log('✅ API Response:', data.success);
+      if (data.success) showMessage('success', '✅ Saved!');
     } catch (error) {
       console.error('Save error:', error);
       showMessage('success', '✅ Saved locally!');
@@ -246,7 +196,18 @@ const CustomerDashboard = () => {
   const saveExtraOrders = async (newOrders) => {
     setExtraOrders(newOrders);
     localStorage.setItem(`extraOrders_${userData.id}`, JSON.stringify(newOrders));
-    await saveOrdersToDB(newOrders);
+    try {
+      await fetch(`${API_URL}/customer-preferences/${userData.id}`, {
+        method: 'POST', headers: getAuthHeaders(),
+        body: JSON.stringify({ 
+          wantMilk: preferences.wantMilk,
+          quantity: preferences.quantity,
+          packSize: preferences.packSize,
+          skipDays: preferences.skipDays || [],
+          extraOrders: newOrders 
+        })
+      });
+    } catch (error) {}
   };
 
   const addProductWithQuantity = () => {
@@ -269,7 +230,15 @@ const CustomerDashboard = () => {
   const handleLogout = () => { setShowLogoutConfirm(true); };
 
   const confirmLogout = () => {
-    saveOrdersToDB(extraOrders);
+    // Save current state before logout
+    const cleanPrefs = {
+      wantMilk: preferences.wantMilk,
+      quantity: preferences.quantity,
+      packSize: preferences.packSize,
+      skipDays: preferences.skipDays || [],
+      extraOrders: extraOrders || []
+    };
+    localStorage.setItem(`milkPrefs_${userData.id}`, JSON.stringify(cleanPrefs));
     sessionStorage.clear();
     window.location.href = '/login';
   };
@@ -305,10 +274,7 @@ const CustomerDashboard = () => {
   if (loading) {
     return (
       <div className="cst-loading-screen">
-        <div className="cst-loader-container">
-          <div className="cst-loader-ring"></div>
-          <div className="cst-loader-center">🥛</div>
-        </div>
+        <div className="cst-loader-container"><div className="cst-loader-ring"></div><div className="cst-loader-center">🥛</div></div>
         <p className="cst-loading-text">Pouring fresh goodness...</p>
       </div>
     );
@@ -316,15 +282,8 @@ const CustomerDashboard = () => {
 
   return (
     <div className="cst-magic-app">
-      {/* Toast */}
-      {message && (
-        <div className={`cst-toast-glass ${message.type}`}>
-          <span>{message.text}</span>
-          <button onClick={() => setMessage(null)}>×</button>
-        </div>
-      )}
+      {message && (<div className={`cst-toast-glass ${message.type}`}><span>{message.text}</span><button onClick={() => setMessage(null)}>×</button></div>)}
 
-      {/* Logout Confirmation Modal */}
       {showLogoutConfirm && (
         <div className="cst-modal-overlay" onClick={cancelLogout}>
           <div className="cst-modal-magic" onClick={e => e.stopPropagation()} style={{maxWidth:'350px',margin:'auto',borderRadius:'24px'}}>
@@ -333,318 +292,76 @@ const CustomerDashboard = () => {
               <span style={{fontSize:'50px',display:'block',marginBottom:'10px'}}>🚪</span>
               <h3 style={{margin:'0 0 6px',fontSize:'18px'}}>Logout?</h3>
               <p style={{color:'#94a3b8',fontSize:'13px',margin:'0 0 20px'}}>Are you sure you want to logout?</p>
-              <div style={{display:'flex',gap:'10px'}}>
-                <button onClick={cancelLogout} className="cst-btn-ghost" style={{flex:1}}>Cancel</button>
-                <button onClick={confirmLogout} className="cst-btn-magic" style={{flex:1,background:'#ef4444'}}>Logout</button>
-              </div>
+              <div style={{display:'flex',gap:'10px'}}><button onClick={cancelLogout} className="cst-btn-ghost" style={{flex:1}}>Cancel</button><button onClick={confirmLogout} className="cst-btn-magic" style={{flex:1,background:'#ef4444'}}>Logout</button></div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Confetti Effect */}
-      {confetti && (
-        <div className="cst-confetti-container">
-          {[...Array(20)].map((_, i) => (
-            <span key={i} className="cst-confetti-piece" style={{
-              left: `${Math.random() * 100}%`,
-              animationDelay: `${Math.random() * 0.5}s`,
-              backgroundColor: ['#f59e0b','#10b981','#3b82f6','#ef4444','#8b5cf6'][i % 5],
-              width: `${6 + Math.random() * 8}px`,
-              height: `${6 + Math.random() * 8}px`,
-            }}></span>
-          ))}
-        </div>
-      )}
+      {confetti && (<div className="cst-confetti-container">{[...Array(20)].map((_, i) => (<span key={i} className="cst-confetti-piece" style={{left:`${Math.random()*100}%`,animationDelay:`${Math.random()*0.5}s`,backgroundColor:['#f59e0b','#10b981','#3b82f6','#ef4444','#8b5cf6'][i%5],width:`${6+Math.random()*8}px`,height:`${6+Math.random()*8}px`}}></span>))}</div>)}
 
-      {/* Product Modal */}
       {showProductModal && selectedProduct && (
         <div className="cst-modal-overlay" onClick={() => setShowProductModal(false)}>
           <div className="cst-modal-magic" onClick={e => e.stopPropagation()}>
             <div className="cst-modal-handle"></div>
             <div className="cst-modal-hero">
-              <div className="cst-modal-hero-img">
-                {selectedProduct.imageUrl ? (
-                  <img src={selectedProduct.imageUrl} alt={selectedProduct.name} />
-                ) : (
-                  <span className="cst-modal-hero-emoji">📷</span>
-                )}
-              </div>
-              <div className="cst-modal-hero-info">
-                <h2>{selectedProduct.name}</h2>
-                <span className="cst-modal-badge">Fresh & Pure</span>
-              </div>
+              <div className="cst-modal-hero-img">{selectedProduct.imageUrl ? <img src={selectedProduct.imageUrl} alt={selectedProduct.name} /> : <span className="cst-modal-hero-emoji">📷</span>}</div>
+              <div className="cst-modal-hero-info"><h2>{selectedProduct.name}</h2><span className="cst-modal-badge">Fresh & Pure</span></div>
             </div>
-            <div className="cst-form-group">
-              <label>📏 Choose Pack Size</label>
-              <div className="cst-chips-glass">
-                {selectedProduct.packs.map((p, i) => (
-                  <button key={i} className={`cst-chip-glass ${selectedPackSize === `${p.size}${p.unit}` ? 'active' : ''}`}
-                    onClick={() => setSelectedPackSize(`${p.size}${p.unit}`)}>
-                    <strong>{p.size}{p.unit}</strong>
-                    <span>₹{p.price}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-            {selectedPackSize && (
-              <div className="cst-form-group">
-                <label>🔢 Quantity</label>
-                <div className="cst-qty-selector">
-                  {[1,2,3,4,5].map(q => (
-                    <button key={q} className={`cst-qty-btn ${orderQuantity === q ? 'active' : ''}`} onClick={() => setOrderQuantity(q)}>{q}</button>
-                  ))}
-                </div>
-              </div>
-            )}
-            <div className="cst-modal-actions">
-              <button onClick={() => setShowProductModal(false)} className="cst-btn-ghost">Cancel</button>
-              <button onClick={addProductWithQuantity} className="cst-btn-magic" disabled={!selectedPackSize}>
-                ✨ Add to Cart
-              </button>
-            </div>
+            <div className="cst-form-group"><label>📏 Choose Pack Size</label><div className="cst-chips-glass">{selectedProduct.packs.map((p, i) => (<button key={i} className={`cst-chip-glass ${selectedPackSize===`${p.size}${p.unit}`?'active':''}`} onClick={()=>setSelectedPackSize(`${p.size}${p.unit}`)}><strong>{p.size}{p.unit}</strong><span>₹{p.price}</span></button>))}</div></div>
+            {selectedPackSize && (<div className="cst-form-group"><label>🔢 Quantity</label><div className="cst-qty-selector">{[1,2,3,4,5].map(q=>(<button key={q} className={`cst-qty-btn ${orderQuantity===q?'active':''}`} onClick={()=>setOrderQuantity(q)}>{q}</button>))}</div></div>)}
+            <div className="cst-modal-actions"><button onClick={()=>setShowProductModal(false)} className="cst-btn-ghost">Cancel</button><button onClick={addProductWithQuantity} className="cst-btn-magic" disabled={!selectedPackSize}>✨ Add to Cart</button></div>
           </div>
         </div>
       )}
 
-      {/* Feedback Modal */}
       {showFeedback && (
         <div className="cst-modal-overlay" onClick={() => setShowFeedback(false)}>
           <div className="cst-modal-magic" onClick={e => e.stopPropagation()}>
             <div className="cst-modal-handle"></div>
-            {!feedbackSubmitted ? (
-              <>
-                <h3 className="cst-modal-title">💬 How was your experience?</h3>
-                <div className="cst-stars-magic">
-                  {[1,2,3,4,5].map(s => (
-                    <button key={s} className={`cst-star-magic ${feedbackRating >= s ? 'active' : ''}`} onClick={() => setFeedbackRating(s)}>
-                      {feedbackRating >= s ? '⭐' : '☆'}
-                    </button>
-                  ))}
-                </div>
-                <textarea placeholder="Your feedback helps us improve..." value={feedbackText} onChange={e => setFeedbackText(e.target.value)} rows={2} />
-                <button onClick={submitFeedback} className="cst-btn-magic full">Submit Feedback</button>
-              </>
-            ) : (
-              <div className="cst-thankyou"><span>🎉</span><h3>Thank You!</h3><p>Your feedback means a lot!</p></div>
-            )}
+            {!feedbackSubmitted ? (<><h3 className="cst-modal-title">💬 How was your experience?</h3><div className="cst-stars-magic">{[1,2,3,4,5].map(s=>(<button key={s} className={`cst-star-magic ${feedbackRating>=s?'active':''}`} onClick={()=>setFeedbackRating(s)}>{feedbackRating>=s?'⭐':'☆'}</button>))}</div><textarea placeholder="Your feedback helps us improve..." value={feedbackText} onChange={e=>setFeedbackText(e.target.value)} rows={2}/><button onClick={submitFeedback} className="cst-btn-magic full">Submit Feedback</button></>) : (<div className="cst-thankyou"><span>🎉</span><h3>Thank You!</h3><p>Your feedback means a lot!</p></div>)}
           </div>
         </div>
       )}
 
-      {/* Header */}
       <header className="cst-header-magic">
-        <div className="cst-header-user" onClick={() => setShowProfile(!showProfile)}>
-          <div className="cst-avatar-magic">
-            <div className="cst-avatar-core">{userData?.name?.charAt(0)?.toUpperCase() || 'C'}</div>
-            <div className={`cst-avatar-aura ${pulseAnim ? 'pulse' : ''}`}></div>
-          </div>
-          <div>
-            <small className="cst-header-greeting">{timeEmoji} Good {timeText}</small>
-            <h2>{userData?.name?.split(' ')[0] || 'Customer'}</h2>
-          </div>
+        <div className="cst-header-user" onClick={()=>setShowProfile(!showProfile)}>
+          <div className="cst-avatar-magic"><div className="cst-avatar-core">{userData?.name?.charAt(0)?.toUpperCase()||'C'}</div><div className={`cst-avatar-aura ${pulseAnim?'pulse':''}`}></div></div>
+          <div><small className="cst-header-greeting">{timeEmoji} Good {timeText}</small><h2>{userData?.name?.split(' ')[0]||'Customer'}</h2></div>
         </div>
         <div className="cst-header-actions">
-          <button className="cst-cart-magic" onClick={() => setActiveTab('orders')}>
-            🛒
-            {cartCount > 0 && <span className="cst-cart-dot-magic">{cartCount}</span>}
-          </button>
+          <button className="cst-cart-magic" onClick={()=>setActiveTab('orders')}>🛒{cartCount>0&&<span className="cst-cart-dot-magic">{cartCount}</span>}</button>
           <button onClick={handleLogout} className="cst-logout-icon-btn" title="Logout">🚪</button>
         </div>
       </header>
 
-      {/* Profile Panel */}
       {showProfile && (
         <div className="cst-profile-panel">
-          <div className="cst-profile-avatar-big">{userData?.name?.charAt(0)?.toUpperCase()}</div>
-          <h3>{userData?.name}</h3>
-          <p>📱 {userData?.phone}</p>
-          <div className="cst-profile-grid-2">
-            <span>🏢 {userData?.apartment || 'N/A'}</span>
-            <span>🚪 {userData?.flat_no || 'N/A'}</span>
-          </div>
-          <button onClick={() => setShowProfile(false)} className="cst-btn-ghost">Close</button>
+          <div className="cst-profile-avatar-big">{userData?.name?.charAt(0)?.toUpperCase()}</div><h3>{userData?.name}</h3><p>📱 {userData?.phone}</p>
+          <div className="cst-profile-grid-2"><span>🏢 {userData?.apartment||'N/A'}</span><span>🚪 {userData?.flat_no||'N/A'}</span></div>
+          <button onClick={()=>setShowProfile(false)} className="cst-btn-ghost">Close</button>
         </div>
       )}
 
-      {/* Scrollable Content */}
       <main className="cst-main-scroll">
-        {/* HOME TAB */}
-        {activeTab === 'home' && (
-          <>
-            <div className="cst-hero-magic">
-              <div className="cst-hero-content-magic">
-                <span className="cst-hero-pill">🥛 Fresh Daily</span>
-                <h1>Pure Dairy.<br/>Pure Love.</h1>
-                <p>Farm fresh products delivered to your doorstep every morning</p>
-                <div className="cst-hero-stats">
-                  <span>🚀 Free Delivery</span>
-                  <span>⭐ 4.8 Rating</span>
-                </div>
-              </div>
-              <div className="cst-hero-visual-magic">
-                <span className="cst-hero-float-1">🥛</span>
-                <span className="cst-hero-float-2">🧀</span>
-              </div>
-            </div>
+        {activeTab === 'home' && (<>
+          <div className="cst-hero-magic"><div className="cst-hero-content-magic"><span className="cst-hero-pill">🥛 Fresh Daily</span><h1>Pure Dairy.<br/>Pure Love.</h1><p>Farm fresh products delivered to your doorstep every morning</p><div className="cst-hero-stats"><span>🚀 Free Delivery</span><span>⭐ 4.8 Rating</span></div></div><div className="cst-hero-visual-magic"><span className="cst-hero-float-1">🥛</span><span className="cst-hero-float-2">🧀</span></div></div>
+          {todayDelivered.length>0&&(<div className="cst-status-strip"><span>✅ Milk delivered today! ({todayDelivered.length} packet)</span><button onClick={()=>setShowFeedback(true)}>Rate</button></div>)}
+          <div className="cst-section-header"><div><h3>🛍️ Our Products</h3><p>Tap to add to your cart</p></div></div>
+          <div className="cst-magic-grid">{allProducts.length===0?(<div className="cst-empty-magic"><span>📦</span><p>No products available</p></div>):allProducts.map((product,i)=>{const color=getProductColor(product.name);const minPrice=product.packs.length>0?Math.min(...product.packs.map(p=>parseFloat(p.price)||0)):0;const maxPrice=product.packs.length>0?Math.max(...product.packs.map(p=>parseFloat(p.price)||0)):0;return(<div key={product.id} className={`cst-magic-card ${color}`} style={{animationDelay:`${i*0.05}s`}} onClick={()=>{setSelectedProduct(product);setSelectedPackSize('');setOrderQuantity(1);setShowProductModal(true);}}><div className="cst-magic-card-img">{product.imageUrl?(<img src={product.imageUrl} alt={product.name} loading="lazy" onError={e=>{e.target.style.display='none';e.target.nextSibling.style.display='flex';}}/>):null}<span className="cst-magic-fallback" style={{display:product.imageUrl?'none':'flex'}}>📷</span><div className="cst-magic-price">{minPrice===maxPrice?`₹${minPrice}`:`₹${minPrice}-${maxPrice}`}</div><div className="cst-magic-rating">⭐ 4.8</div></div><div className="cst-magic-card-body"><h4>{product.name}</h4><p>{product.packs.map(p=>`${p.size}${p.unit}`).join(' · ')}</p><button className="cst-magic-add-btn"><span>+</span> Add</button></div></div>)})}</div>
+        </>)}
 
-            {todayDelivered.length > 0 && (
-              <div className="cst-status-strip">
-                <span>✅ Milk delivered today! ({todayDelivered.length} packet)</span>
-                <button onClick={() => setShowFeedback(true)}>Rate</button>
-              </div>
-            )}
+        {activeTab === 'orders' && (<div className="cst-section"><h3>🛒 Your Orders</h3>{extraOrders.length===0?(<div className="cst-empty-magic"><span>🛒</span><p>No orders yet</p><button onClick={()=>setActiveTab('home')} className="cst-btn-magic">Browse Products</button></div>):(<>{extraOrders.filter(o=>o.date===today).length>0&&(<><p className="cst-subtitle">Today</p>{extraOrders.filter(o=>o.date===today).map(o=>(<div key={o.id} className="cst-order-card"><div className="cst-order-img">{o.imageUrl?<img src={o.imageUrl} alt={o.productName}/>:<span>📦</span>}</div><div className="cst-order-info"><h5>{o.productName}</h5><p>{o.packSize} × {o.quantity}</p></div><strong>₹{o.price*o.quantity}</strong><button onClick={()=>removeExtraOrder(o.id)} className="cst-order-del">×</button></div>))}</>)}{extraOrders.filter(o=>o.date!==today).length>0&&(<><p className="cst-subtitle">Previous</p>{extraOrders.filter(o=>o.date!==today).map(o=>(<div key={o.id} className="cst-order-card past"><span>{o.productName} ({o.packSize}) ×{o.quantity}</span><span>{new Date(o.date).toLocaleDateString('en-IN',{day:'numeric',month:'short'})}</span><strong>₹{o.price*o.quantity}</strong></div>))}</>)}</>)}</div>)}
 
-            <div className="cst-section-header">
-              <div><h3>🛍️ Our Products</h3><p>Tap to add to your cart</p></div>
-            </div>
+        {activeTab === 'history' && (<div className="cst-section"><h3>📜 Delivery History</h3>{deliveries.length===0?(<div className="cst-empty-magic"><span>📭</span><p>No deliveries</p></div>):deliveries.map(d=>(<div key={d.id} className="cst-history-magic"><div className={`cst-history-dot-magic ${d.status}`}></div><div className="cst-history-content-magic"><span className="cst-history-date">{new Date(d.delivery_date).toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'short'})}</span><span>{d.product_name} · {d.pack_size} × {d.quantity}</span><div className="cst-history-row-magic"><span className={`cst-badge-magic ${d.status}`}>{d.status==='delivered'?'Done':'Pending'}</span><strong>₹{d.total_amount}</strong></div></div></div>))}</div>)}
 
-            <div className="cst-magic-grid">
-              {allProducts.length === 0 ? (
-                <div className="cst-empty-magic"><span>📦</span><p>No products available</p></div>
-              ) : (
-                allProducts.map((product, i) => {
-                  const color = getProductColor(product.name);
-                  const minPrice = product.packs.length > 0 ? Math.min(...product.packs.map(p => parseFloat(p.price)||0)) : 0;
-                  const maxPrice = product.packs.length > 0 ? Math.max(...product.packs.map(p => parseFloat(p.price)||0)) : 0;
-                  
-                  return (
-                    <div key={product.id} className={`cst-magic-card ${color}`} style={{animationDelay:`${i*0.05}s`}}
-                      onClick={() => { setSelectedProduct(product); setSelectedPackSize(''); setOrderQuantity(1); setShowProductModal(true); }}>
-                      <div className="cst-magic-card-img">
-                        {product.imageUrl ? (
-                          <img src={product.imageUrl} alt={product.name} loading="lazy"
-                            onError={e => { e.target.style.display='none'; e.target.nextSibling.style.display='flex'; }} />
-                        ) : null}
-                        <span className="cst-magic-fallback" style={{display: product.imageUrl ? 'none' : 'flex'}}>📷</span>
-                        <div className="cst-magic-price">{minPrice === maxPrice ? `₹${minPrice}` : `₹${minPrice}-${maxPrice}`}</div>
-                        <div className="cst-magic-rating">⭐ 4.8</div>
-                      </div>
-                      <div className="cst-magic-card-body">
-                        <h4>{product.name}</h4>
-                        <p>{product.packs.map(p => `${p.size}${p.unit}`).join(' · ')}</p>
-                        <button className="cst-magic-add-btn"><span>+</span> Add</button>
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          </>
-        )}
+        {activeTab === 'preferences' && (<div className="cst-section"><h3>🥛 Milk Settings</h3><div className="cst-pref-magic"><div className="cst-pref-row-magic"><span>Daily Delivery</span><label className="cst-toggle-magic"><input type="checkbox" checked={preferences.wantMilk} onChange={e=>savePreferences({...preferences,wantMilk:e.target.checked})}/><span></span></label></div></div><div className="cst-pref-magic"><p>Quantity</p><div className="cst-chips-glass">{[1,2,3,4,5].map(q=><button key={q} className={`cst-chip-glass ${preferences.quantity===q?'active':''}`} onClick={()=>savePreferences({...preferences,quantity:q})}>{q}</button>)}</div></div><div className="cst-pref-magic"><p>Pack Size</p><div className="cst-chips-glass">{['250ml','500ml','1L'].map(s=><button key={s} className={`cst-chip-glass ${preferences.packSize===s?'active':''}`} onClick={()=>savePreferences({...preferences,packSize:s})}>{s}</button>)}</div></div><div className="cst-pref-magic"><p>Skip Days</p><div className="cst-chips-glass">{['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d=><button key={d} className={`cst-chip-glass ${preferences.skipDays.includes(d)?'active':''}`} onClick={()=>{const ns=preferences.skipDays.includes(d)?preferences.skipDays.filter(x=>x!==d):[...preferences.skipDays,d];savePreferences({...preferences,skipDays:ns})}}>{d}</button>)}</div></div><button onClick={()=>showMessage('success','✅ Saved!')} className="cst-btn-magic full" disabled={saving}>{saving?'⏳ Saving...':'💾 Save'}</button></div>)}
 
-        {/* ORDERS TAB */}
-        {activeTab === 'orders' && (
-          <div className="cst-section">
-            <h3>🛒 Your Orders</h3>
-            {extraOrders.length === 0 ? (
-              <div className="cst-empty-magic"><span>🛒</span><p>No orders yet</p>
-                <button onClick={() => setActiveTab('home')} className="cst-btn-magic">Browse Products</button>
-              </div>
-            ) : (
-              <>
-                {extraOrders.filter(o => o.date === today).length > 0 && (
-                  <>
-                    <p className="cst-subtitle">Today</p>
-                    {extraOrders.filter(o => o.date === today).map(o => (
-                      <div key={o.id} className="cst-order-card">
-                        <div className="cst-order-img">
-                          {o.imageUrl ? <img src={o.imageUrl} alt={o.productName} /> : <span>📦</span>}
-                        </div>
-                        <div className="cst-order-info"><h5>{o.productName}</h5><p>{o.packSize} × {o.quantity}</p></div>
-                        <strong>₹{o.price * o.quantity}</strong>
-                        <button onClick={() => removeExtraOrder(o.id)} className="cst-order-del">×</button>
-                      </div>
-                    ))}
-                  </>
-                )}
-                {extraOrders.filter(o => o.date !== today).length > 0 && (
-                  <>
-                    <p className="cst-subtitle">Previous</p>
-                    {extraOrders.filter(o => o.date !== today).map(o => (
-                      <div key={o.id} className="cst-order-card past">
-                        <span>{o.productName} ({o.packSize}) ×{o.quantity}</span>
-                        <span>{new Date(o.date).toLocaleDateString('en-IN',{day:'numeric',month:'short'})}</span>
-                        <strong>₹{o.price * o.quantity}</strong>
-                      </div>
-                    ))}
-                  </>
-                )}
-              </>
-            )}
-          </div>
-        )}
-
-        {/* HISTORY TAB */}
-        {activeTab === 'history' && (
-          <div className="cst-section">
-            <h3>📜 Delivery History</h3>
-            {deliveries.length === 0 ? (
-              <div className="cst-empty-magic"><span>📭</span><p>No deliveries</p></div>
-            ) : (
-              deliveries.map(d => (
-                <div key={d.id} className="cst-history-magic">
-                  <div className={`cst-history-dot-magic ${d.status}`}></div>
-                  <div className="cst-history-content-magic">
-                    <span className="cst-history-date">{new Date(d.delivery_date).toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'short'})}</span>
-                    <span>{d.product_name} · {d.pack_size} × {d.quantity}</span>
-                    <div className="cst-history-row-magic">
-                      <span className={`cst-badge-magic ${d.status}`}>{d.status === 'delivered' ? 'Done' : 'Pending'}</span>
-                      <strong>₹{d.total_amount}</strong>
-                    </div>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        )}
-
-        {/* PREFERENCES TAB */}
-        {activeTab === 'preferences' && (
-          <div className="cst-section">
-            <h3>🥛 Milk Settings</h3>
-            <div className="cst-pref-magic">
-              <div className="cst-pref-row-magic">
-                <span>Daily Delivery</span>
-                <label className="cst-toggle-magic">
-                  <input type="checkbox" checked={preferences.wantMilk} onChange={e => savePreferences({...preferences, wantMilk: e.target.checked})} />
-                  <span></span>
-                </label>
-              </div>
-            </div>
-            <div className="cst-pref-magic"><p>Quantity</p><div className="cst-chips-glass">{[1,2,3,4,5].map(q => <button key={q} className={`cst-chip-glass ${preferences.quantity===q?'active':''}`} onClick={()=>savePreferences({...preferences,quantity:q})}>{q}</button>)}</div></div>
-            <div className="cst-pref-magic"><p>Pack Size</p><div className="cst-chips-glass">{['250ml','500ml','1L'].map(s => <button key={s} className={`cst-chip-glass ${preferences.packSize===s?'active':''}`} onClick={()=>savePreferences({...preferences,packSize:s})}>{s}</button>)}</div></div>
-            <div className="cst-pref-magic"><p>Skip Days</p><div className="cst-chips-glass">{['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d => <button key={d} className={`cst-chip-glass ${preferences.skipDays.includes(d)?'active':''}`} onClick={()=>{const ns=preferences.skipDays.includes(d)?preferences.skipDays.filter(x=>x!==d):[...preferences.skipDays,d];savePreferences({...preferences,skipDays:ns})}}>{d}</button>)}</div></div>
-            <button onClick={()=>showMessage('success','✅ Saved!')} className="cst-btn-magic full" disabled={saving}>{saving?'⏳ Saving...':'💾 Save'}</button>
-          </div>
-        )}
-
-        {/* SETTINGS TAB */}
-        {activeTab === 'settings' && (
-          <div className="cst-section">
-            <h3>⚙️ More</h3>
-            <button onClick={handleChangePassword} className="cst-setting-magic"><span>🔒</span>Change Password<span>→</span></button>
-            <button onClick={()=>setShowFeedback(true)} className="cst-setting-magic"><span>💬</span>Feedback<span>→</span></button>
-            <div className="cst-setting-magic"><span>📞</span>9398263810</div>
-            <button onClick={handleLogout} className="cst-setting-magic logout"><span>🚪</span>Logout</button>
-          </div>
-        )}
+        {activeTab === 'settings' && (<div className="cst-section"><h3>⚙️ More</h3><button onClick={handleChangePassword} className="cst-setting-magic"><span>🔒</span>Change Password<span>→</span></button><button onClick={()=>setShowFeedback(true)} className="cst-setting-magic"><span>💬</span>Feedback<span>→</span></button><div className="cst-setting-magic"><span>📞</span>9398263810</div><button onClick={handleLogout} className="cst-setting-magic logout"><span>🚪</span>Logout</button></div>)}
       </main>
 
-      {/* Sticky Bottom Nav */}
       <nav className="cst-nav-magic">
-        {[
-          { id: 'home', icon: '🏪', label: 'Shop' },
-          { id: 'orders', icon: '🛒', label: 'Orders' },
-          { id: 'history', icon: '📜', label: 'History' },
-          { id: 'preferences', icon: '🥛', label: 'Milk' },
-        ].map(item => (
-          <button key={item.id} className={`cst-nav-item-magic ${activeTab === item.id ? 'active' : ''}`} onClick={() => setActiveTab(item.id)}>
-            <span className="cst-nav-icon-magic">{item.icon}</span>
-            <span className="cst-nav-label-magic">{item.label}</span>
-            {activeTab === item.id && <span className="cst-nav-active-dot"></span>}
-          </button>
-        ))}
+        {[{id:'home',icon:'🏪',label:'Shop'},{id:'orders',icon:'🛒',label:'Orders'},{id:'history',icon:'📜',label:'History'},{id:'preferences',icon:'🥛',label:'Milk'}].map(item=>(<button key={item.id} className={`cst-nav-item-magic ${activeTab===item.id?'active':''}`} onClick={()=>setActiveTab(item.id)}><span className="cst-nav-icon-magic">{item.icon}</span><span className="cst-nav-label-magic">{item.label}</span>{activeTab===item.id&&<span className="cst-nav-active-dot"></span>}</button>))}
       </nav>
     </div>
   );
