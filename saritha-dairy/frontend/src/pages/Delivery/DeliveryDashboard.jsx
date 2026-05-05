@@ -94,8 +94,10 @@ const DeliveryDashboard = () => {
         const ordersData = await ordersRes.json();
         if (ordersData.success && ordersData.data) {
           ordersData.data.forEach(o => {
+            // Only count orders that are NOT delivered
+            const pendingOrders = o.orders.filter(order => order.status !== 'delivered');
             extraOrdersMap[o.customerId] = o.orders;
-            totalExtraOrders += o.orders.length;
+            totalExtraOrders += pendingOrders.length;
           });
           setExtraOrdersCount(totalExtraOrders);
         }
@@ -135,6 +137,7 @@ const DeliveryDashboard = () => {
     setLoading(false);
   };
 
+  // ✅ FIXED: markDelivered - Marks orders as delivered instead of deleting
   const markDelivered = async (customerId) => {
     const customer = customers.find(c => c.id == customerId);
     if (!customer || deliveringId) return;
@@ -170,9 +173,17 @@ const DeliveryDashboard = () => {
 
       const data = await response.json();
       if (data.success) {
-        // ✅ Mark extra orders as delivered by clearing them from database
+        // ✅ FIXED: Mark extra orders as delivered instead of deleting
         if (customer.extraOrders && customer.extraOrders.length > 0) {
           try {
+            const today = new Date().toISOString().split('T')[0];
+            const updatedOrders = customer.extraOrders.map(order => {
+              if (order.date === today) {
+                return { ...order, status: 'delivered' }; // ✅ Mark as delivered
+              }
+              return order;
+            });
+            
             await fetch(`${API_URL}/customer-preferences/${customerId}`, {
               method: 'POST',
               headers: getAuthHeaders(),
@@ -181,28 +192,42 @@ const DeliveryDashboard = () => {
                 quantity: customer.preferences?.quantity ?? 2,
                 packSize: customer.preferences?.packSize ?? '500ml',
                 skipDays: customer.preferences?.skipDays || [],
-                extraOrders: [] // ✅ Clear orders = delivered
+                extraOrders: updatedOrders // ✅ Save with delivered status
               })
             });
-            console.log('✅ Extra orders cleared for customer:', customer.name);
+            console.log('✅ Orders marked as delivered for:', customer.name);
           } catch (e) {
-            console.log('Failed to clear extra orders:', e);
+            console.log('Failed to update orders:', e);
           }
         }
 
         setCustomers(prev => {
+          const today = new Date().toISOString().split('T')[0];
           const updated = prev.map(c => c.id == customerId 
-            ? { ...c, delivered: true, deliveryData: { total_amount: totalAmount }, extraOrders: [] } 
+            ? { 
+                ...c, 
+                delivered: true, 
+                deliveryData: { total_amount: totalAmount }, 
+                // ✅ Mark extra orders as delivered in local state
+                extraOrders: (c.extraOrders || []).map(order => {
+                  if (order.date === today) {
+                    return { ...order, status: 'delivered' };
+                  }
+                  return order;
+                })
+              } 
             : c);
           const done = updated.filter(c => c.delivered);
+          // Count undelivered orders
+          const remainingOrders = updated.reduce((s, c) => 
+            s + (c.extraOrders || []).filter(o => o.status !== 'delivered').length, 0
+          );
+          setExtraOrdersCount(remainingOrders);
           setTodayStats({ 
             deliveries: done.length, 
             collected: done.reduce((s, c) => s + (parseFloat(c.deliveryData?.total_amount) || 0), 0), 
             pending: updated.filter(c => !c.delivered).length 
           });
-          // Update extra orders count
-          const remainingOrders = updated.reduce((s, c) => s + (c.extraOrders?.length || 0), 0);
-          setExtraOrdersCount(remainingOrders);
           return updated;
         });
         showMessage('success', `✅ Delivered to ${customer.name}`);
@@ -318,7 +343,7 @@ const DeliveryDashboard = () => {
         </div>
       )}
 
-      {/* ✅ MORNING BANNER */}
+      {/* ✅ MORNING BANNER - Only show undelivered orders count */}
       {showOrdersBanner && extraOrdersCount > 0 && (
         <div className="dd-pro-morning-banner">
           <div className="dd-pro-banner-content">
@@ -465,6 +490,9 @@ const DeliveryDashboard = () => {
                       const skipDay = isSkipDay(customer);
                       const shouldBlockDelivery = paused || skipDay;
                       
+                      // ✅ Show only UNDELIVERED extra orders
+                      const pendingExtraOrders = (customer.extraOrders || []).filter(o => o.status !== 'delivered');
+                      
                       return (
                         <div key={customer.id} className={`dd-pro-list-row ${customer.delivered ? 'done' : ''} ${paused ? 'paused' : ''} ${skipDay ? 'skip' : ''}`}>
                           <div className="dd-pro-list-left">
@@ -480,11 +508,11 @@ const DeliveryDashboard = () => {
                               <p>🚪 {customer.flat_no || 'N/A'}, {customer.apartment}</p>
                               {milkQty && <p className="dd-pro-milk-pref">🥛 {milkQty}</p>}
                               
-                              {/* ✅ EXTRA ORDERS */}
-                              {customer.extraOrders && customer.extraOrders.length > 0 && (
+                              {/* ✅ ONLY PENDING EXTRA ORDERS */}
+                              {pendingExtraOrders.length > 0 && (
                                 <div className="dd-pro-extra-orders">
                                   <span className="dd-pro-extra-label">📦 Orders:</span>
-                                  {customer.extraOrders.map((order, i) => (
+                                  {pendingExtraOrders.map((order, i) => (
                                     <span key={i} className="dd-pro-extra-tag">
                                       {order.productName} ({order.packSize}) ×{order.quantity}
                                     </span>
