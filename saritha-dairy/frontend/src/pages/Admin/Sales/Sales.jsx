@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import './Sales.css';
 
 const API_URL = 'https://saritha-dairy-api.onrender.com/api';
+const BASE_URL = 'https://saritha-dairy-api.onrender.com';
 
 const Sales = () => {
   const [products, setProducts] = useState([]);
@@ -22,7 +23,6 @@ const Sales = () => {
     fetchSalesHistory();
   }, []);
 
-  // ✅ Get auth token
   const getToken = () => sessionStorage.getItem('authToken');
 
   const getAuthHeaders = () => ({
@@ -87,17 +87,21 @@ const Sales = () => {
   const addToCart = (product) => {
     const existingItem = cart.find(item => 
       item.product_name === product.product_name && 
-      item.pack_size_display === product.pack_size_display
+      item.pack_size_display === product.pack_size_display &&
+      item.barcode === product.barcode
     );
+    
+    const pricePerItem = parseFloat(product.selling_price) || 0;
     
     if (existingItem) {
       if (existingItem.quantity + 1 > product.quantity) {
-        showMessage('error', `Only ${product.quantity} packets available!`);
+        showMessage('error', `Only ${product.quantity} available!`);
         return;
       }
       setCart(cart.map(item =>
         item.product_name === product.product_name && 
-        item.pack_size_display === product.pack_size_display
+        item.pack_size_display === product.pack_size_display &&
+        item.barcode === product.barcode
           ? { ...item, quantity: item.quantity + 1 }
           : item
       ));
@@ -105,11 +109,13 @@ const Sales = () => {
       setCart([...cart, {
         product_name: product.product_name,
         pack_size_display: product.pack_size_display,
-        price: product.selling_price,
+        barcode: product.barcode || '',
+        price: pricePerItem,
         quantity: 1,
         maxQuantity: product.quantity,
         image_url: product.image_url,
-        icon: getProductIcon(product.product_name)
+        icon: getProductIcon(product.product_name),
+        isManualPaneer: product.pack_size_display?.toLowerCase().includes('piece')
       }]);
     }
     showMessage('success', 'Added to cart');
@@ -141,7 +147,9 @@ const Sales = () => {
   };
 
   const calculateTotal = () => {
-    return cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+    return cart.reduce((sum, item) => {
+      return sum + (item.price * item.quantity);
+    }, 0);
   };
 
   const handleCheckout = async () => {
@@ -156,6 +164,7 @@ const Sales = () => {
       items: cart.map(item => ({
         product_name: item.product_name,
         pack_size_display: item.pack_size_display,
+        barcode: item.barcode || '',
         quantity: item.quantity,
         price: item.price,
         total: item.price * item.quantity
@@ -178,7 +187,7 @@ const Sales = () => {
       const result = await response.json();
       
       if (result.success) {
-        showMessage('success', `✅ Sale completed! Total: ₹${calculateTotal()}`);
+        showMessage('success', `✅ Sale completed! Total: ₹${calculateTotal().toLocaleString()}`);
         setCart([]);
         setCustomerName('');
         setCustomerPhone('');
@@ -186,7 +195,7 @@ const Sales = () => {
         fetchSalesHistory();
         setCartVisible(false);
       } else {
-        showMessage('error', result.error);
+        showMessage('error', result.error || 'Failed to complete sale');
       }
     } catch (err) {
       showMessage('error', 'Server error!');
@@ -233,7 +242,8 @@ const Sales = () => {
   };
 
   const filteredProducts = products.filter(product =>
-    product.product_name?.toLowerCase().includes(searchTerm.toLowerCase())
+    product.product_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    product.pack_size_display?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const getSaleSummary = (items) => {
@@ -286,32 +296,56 @@ const Sales = () => {
         <div className="modern-sales-content">
           <div className="products-modern-section">
             <div className="search-modern-bar">
-              <input type="text" placeholder="Search products..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+              <span className="search-icon">🔍</span>
+              <input 
+                type="text" 
+                placeholder="Search products..." 
+                value={searchTerm} 
+                onChange={(e) => setSearchTerm(e.target.value)} 
+              />
+              {searchTerm && (
+                <button className="search-clear" onClick={() => setSearchTerm('')}>×</button>
+              )}
             </div>
 
             {loading ? (
-              <div className="modern-loading">Loading products...</div>
+              <div className="modern-loading">
+                <div className="loading-spinner"></div>
+                <p>Loading products...</p>
+              </div>
             ) : filteredProducts.length === 0 ? (
-              <div className="modern-empty"><span>📦</span><p>No products available</p></div>
+              <div className="modern-empty">
+                <span>📦</span>
+                <p>{searchTerm ? 'No products match your search' : 'No products available in stock'}</p>
+              </div>
             ) : (
               <div className="products-modern-grid">
                 {filteredProducts.map((product, idx) => (
-                  <div key={idx} className="product-modern-card">
+                  <div key={`${product.barcode || idx}`} className="product-modern-card">
                     <div className="product-modern-image">
                       {product.image_url ? (
-                        <img src={`http://localhost:5000${product.image_url}`} alt={product.product_name} />
-                      ) : (
-                        <div className="product-modern-icon">{getProductIcon(product.product_name)}</div>
+                        <img src={`${BASE_URL}${product.image_url}`} alt={product.product_name} onError={(e) => {
+                          e.target.style.display = 'none';
+                          e.target.nextSibling.style.display = 'flex';
+                        }} />
+                      ) : null}
+                      <div className="product-modern-icon" style={{ display: product.image_url ? 'none' : 'flex' }}>
+                        {getProductIcon(product.product_name)}
+                      </div>
+                      {product.pack_size_display?.toLowerCase().includes('piece') && (
+                        <span className="manual-badge">🧀 Cut</span>
                       )}
                     </div>
                     <div className="product-modern-info">
                       <h3 className="product-modern-name">{product.product_name}</h3>
                       <p className="product-modern-size">{product.pack_size_display}</p>
                       <div className="product-modern-price-row">
-                        <span className="product-modern-price">₹{product.selling_price}</span>
+                        <span className="product-modern-price">₹{parseFloat(product.selling_price).toLocaleString()}</span>
                         <span className="product-modern-stock">{product.quantity} left</span>
                       </div>
-                      <button className="product-modern-add" onClick={() => addToCart(product)}>Add to Cart</button>
+                      <button className="product-modern-add" onClick={() => addToCart(product)}>
+                        + Add to Cart
+                      </button>
                     </div>
                   </div>
                 ))}
@@ -330,12 +364,22 @@ const Sales = () => {
           </div>
 
           {salesHistory.length === 0 ? (
-            <div className="history-empty"><span>📊</span><p>No sales yet</p></div>
+            <div className="history-empty">
+              <span>📊</span>
+              <p>No sales yet</p>
+            </div>
           ) : (
             <div className="history-table-wrapper">
               <table className="sales-history-table">
                 <thead>
-                  <tr><th>Date & Time</th><th>Customer</th><th>Phone</th><th>Products</th><th>Total</th><th>Action</th></tr>
+                  <tr>
+                    <th>Date & Time</th>
+                    <th>Customer</th>
+                    <th>Phone</th>
+                    <th>Products</th>
+                    <th>Total</th>
+                    <th>Action</th>
+                  </tr>
                 </thead>
                 <tbody>
                   {salesHistory.map((sale) => {
@@ -349,13 +393,21 @@ const Sales = () => {
                           <td>
                             <div className="items-summary">
                               {saleSummary.map((item, i) => (
-                                <span key={i} className="item-summary-badge">{item.product_name} - {item.pack_size_display} ({item.quantity} pcs)</span>
+                                <span key={i} className="item-summary-badge">
+                                  {item.product_name} - {item.pack_size_display} ({item.quantity} pcs)
+                                </span>
                               ))}
                             </div>
                           </td>
                           <td className="history-total">₹{parseFloat(sale.total_amount).toLocaleString()}</td>
                           <td className="action-cell">
-                            <button className="delete-sale-btn" onClick={(e) => { e.stopPropagation(); deleteSale(sale.id); }}>🗑️</button>
+                            <button 
+                              className="delete-sale-btn" 
+                              onClick={(e) => { e.stopPropagation(); deleteSale(sale.id); }}
+                              title="Delete sale"
+                            >
+                              🗑️
+                            </button>
                           </td>
                         </tr>
                         {expandedSale === sale.id && (
@@ -365,11 +417,23 @@ const Sales = () => {
                                 <div className="details-title">📋 Complete Sale Details</div>
                                 <table className="items-details-table">
                                   <thead>
-                                    <tr><th>Product Name</th><th>Pack Size</th><th>Qty</th><th>Price</th><th>Total</th></tr>
+                                    <tr>
+                                      <th>Product Name</th>
+                                      <th>Pack Size</th>
+                                      <th>Qty</th>
+                                      <th>Price</th>
+                                      <th>Total</th>
+                                    </tr>
                                   </thead>
                                   <tbody>
                                     {sale.items?.map((item, i) => (
-                                      <tr key={i}><td>{item.product_name}</td><td>{item.pack_size_display}</td><td>{item.quantity}</td><td>₹{item.price}</td><td>₹{item.total}</td></tr>
+                                      <tr key={i}>
+                                        <td>{item.product_name}</td>
+                                        <td>{item.pack_size_display}</td>
+                                        <td>{item.quantity}</td>
+                                        <td>₹{parseFloat(item.price).toLocaleString()}</td>
+                                        <td>₹{parseFloat(item.total).toLocaleString()}</td>
+                                      </tr>
                                     ))}
                                     <tr className="details-total-row">
                                       <td colSpan="4" className="details-total-label">Grand Total</td>
@@ -394,12 +458,16 @@ const Sales = () => {
       {/* Cart Sidebar */}
       <div className={`cart-modern-sidebar ${cartVisible ? 'open' : ''}`}>
         <div className="cart-modern-header">
-          <h3>Your Cart</h3>
+          <h3>🛒 Your Cart ({cartItemCount})</h3>
           <button className="cart-close" onClick={() => setCartVisible(false)}>✕</button>
         </div>
 
         {cart.length === 0 ? (
-          <div className="cart-modern-empty"><span>🛒</span><p>Your cart is empty</p></div>
+          <div className="cart-modern-empty">
+            <span>🛒</span>
+            <p>Your cart is empty</p>
+            <p className="cart-empty-subtitle">Tap on products to add them</p>
+          </div>
         ) : (
           <>
             <div className="cart-modern-items">
@@ -407,40 +475,66 @@ const Sales = () => {
                 <div key={idx} className="cart-modern-item">
                   <div className="cart-item-image">
                     {item.image_url ? (
-                      <img src={`http://localhost:5000${item.image_url}`} alt={item.product_name} />
-                    ) : (
-                      <div className="cart-item-icon">{item.icon}</div>
-                    )}
+                      <img src={`${BASE_URL}${item.image_url}`} alt={item.product_name} onError={(e) => {
+                        e.target.style.display = 'none';
+                        e.target.nextSibling.style.display = 'flex';
+                      }} />
+                    ) : null}
+                    <div className="cart-item-icon" style={{ display: item.image_url ? 'none' : 'flex' }}>
+                      {item.icon}
+                    </div>
                   </div>
                   <div className="cart-item-details">
                     <div className="cart-item-name">{item.product_name}</div>
-                    <div className="cart-item-size">{item.pack_size_display}</div>
-                    <div className="cart-item-price">₹{item.price}</div>
+                    <div className="cart-item-size">
+                      {item.pack_size_display}
+                      {item.isManualPaneer && <span className="manual-tag">🧀 Cut Piece</span>}
+                    </div>
+                    <div className="cart-item-price">₹{item.price.toLocaleString()} / piece</div>
                   </div>
                   <div className="cart-item-quantity">
-                    <button className="cart-qty-btn" onClick={() => updateQuantity(idx, item.quantity - 1)}>-</button>
+                    <button className="cart-qty-btn" onClick={() => updateQuantity(idx, item.quantity - 1)}>−</button>
                     <span className="cart-qty-value">{item.quantity}</span>
                     <button className="cart-qty-btn" onClick={() => updateQuantity(idx, item.quantity + 1)}>+</button>
                   </div>
                   <div className="cart-item-total-section">
                     <div className="cart-item-total">₹{(item.price * item.quantity).toLocaleString()}</div>
-                    <button className="cart-item-remove" onClick={() => removeFromCart(idx)}>🗑️</button>
+                    <button className="cart-item-remove" onClick={() => removeFromCart(idx)} title="Remove">🗑️</button>
                   </div>
                 </div>
               ))}
             </div>
 
             <div className="cart-modern-customer">
-              <input type="text" placeholder="Customer Name" value={customerName} onChange={(e) => setCustomerName(e.target.value)} />
-              <input type="tel" placeholder="Phone Number" value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} />
+              <div className="customer-field">
+                <label>👤 Customer Name</label>
+                <input 
+                  type="text" 
+                  placeholder="Walk-in Customer" 
+                  value={customerName} 
+                  onChange={(e) => setCustomerName(e.target.value)} 
+                />
+              </div>
+              <div className="customer-field">
+                <label>📱 Phone Number</label>
+                <input 
+                  type="tel" 
+                  placeholder="Optional" 
+                  value={customerPhone} 
+                  onChange={(e) => setCustomerPhone(e.target.value.replace(/\D/g, '').slice(0, 10))} 
+                  maxLength={10}
+                />
+              </div>
             </div>
 
             <div className="cart-modern-total">
-              <span>Total:</span>
+              <span>Total Amount:</span>
               <strong>₹{calculateTotal().toLocaleString()}</strong>
             </div>
 
-            <button className="cart-modern-checkout" onClick={handleCheckout}>Complete Sale</button>
+            <button className="cart-modern-checkout" onClick={handleCheckout}>
+              ✅ Complete Sale
+            </button>
           </>
         )}
       </div>

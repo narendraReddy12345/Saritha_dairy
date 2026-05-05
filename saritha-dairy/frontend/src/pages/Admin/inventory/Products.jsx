@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import './Products.css';
 
 const API_URL = 'https://saritha-dairy-api.onrender.com/api';
-const BASE_URL = 'https://saritha-dairy-api.onrender.com';  // ✅ For images (no /api)
+const BASE_URL = 'https://saritha-dairy-api.onrender.com';
 
 const Products = () => {
   const [products, setProducts] = useState([]);
@@ -11,9 +11,9 @@ const Products = () => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('all');
   const [showToast, setShowToast] = useState({ show: false, message: '', type: '' });
   const [submitting, setSubmitting] = useState(false);
+  const [viewMode, setViewMode] = useState('grid'); // 'grid' or 'list'
   
   const [formData, setFormData] = useState({
     name: '',
@@ -26,7 +26,6 @@ const Products = () => {
     fetchProducts();
   }, []);
 
-  // Get auth token
   const getToken = () => sessionStorage.getItem('authToken');
 
   const getAuthHeaders = () => ({
@@ -119,7 +118,6 @@ const Products = () => {
       return;
     }
 
-    // ✅ Use FormData for image upload
     const formDataToSend = new FormData();
     formDataToSend.append('name', formData.name);
     formDataToSend.append('packs', JSON.stringify(validPacks));
@@ -134,16 +132,14 @@ const Products = () => {
       
       const response = await fetch(url, {
         method: editingProduct ? 'PUT' : 'POST',
-        headers: {
-          ...getAuthHeaders()  // Only auth header, no Content-Type for FormData
-        },
+        headers: { ...getAuthHeaders() },
         body: formDataToSend
       });
       
       const result = await response.json();
       
       if (result.success) {
-        showMessage(editingProduct ? 'Product updated!' : 'Product added!');
+        showMessage(editingProduct ? '✅ Product updated!' : '✅ Product added!');
         setShowAddModal(false);
         setEditingProduct(null);
         resetForm();
@@ -158,18 +154,15 @@ const Products = () => {
   };
 
   const handleDelete = async (id, name) => {
-    if (window.confirm(`Delete "${name}"?`)) {
+    if (window.confirm(`Delete "${name}"? This cannot be undone.`)) {
       try {
         const response = await fetch(`${API_URL}/products/${id}`, {
           method: 'DELETE',
-          headers: {
-            'Content-Type': 'application/json',
-            ...getAuthHeaders()
-          }
+          headers: { 'Content-Type': 'application/json', ...getAuthHeaders() }
         });
         const result = await response.json();
         if (result.success) {
-          showMessage('Product deleted!');
+          showMessage('🗑️ Product deleted!');
           fetchProducts();
         }
       } catch (error) {
@@ -191,7 +184,6 @@ const Products = () => {
       name: product.name,
       packs: packs,
       image: null,
-      // ✅ FIXED: Use BASE_URL for images (no /api)
       imagePreview: product.image_url ? `${BASE_URL}${product.image_url}` : ''
     });
     setShowAddModal(true);
@@ -219,184 +211,118 @@ const Products = () => {
     return '📦';
   };
 
+  const getProductColor = (name) => {
+    const n = name.toLowerCase();
+    if (n.includes('milk')) return { bg: '#eff6ff', text: '#3b82f6', grad: 'linear-gradient(135deg, #eff6ff, #dbeafe)' };
+    if (n.includes('curd')) return { bg: '#f0fdf4', text: '#10b981', grad: 'linear-gradient(135deg, #f0fdf4, #dcfce7)' };
+    if (n.includes('paneer')) return { bg: '#fffbeb', text: '#f59e0b', grad: 'linear-gradient(135deg, #fffbeb, #fef3c7)' };
+    if (n.includes('ghee')) return { bg: '#fef2f2', text: '#ef4444', grad: 'linear-gradient(135deg, #fef2f2, #fee2e2)' };
+    if (n.includes('butter')) return { bg: '#faf5ff', text: '#8b5cf6', grad: 'linear-gradient(135deg, #faf5ff, #ede9fe)' };
+    return { bg: '#f8fafc', text: '#64748b', grad: 'linear-gradient(135deg, #f8fafc, #f1f5f9)' };
+  };
+
   const formatPacks = (packs) => {
     if (!packs) return [];
     return typeof packs === 'string' ? JSON.parse(packs) : packs;
   };
 
-  const filteredProducts = products.filter(product => {
-    const matchesSearch = product.name?.toLowerCase().includes(searchTerm.toLowerCase());
-    return matchesSearch;
-  });
+  const filteredProducts = products.filter(product =>
+    product.name?.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   return (
-    <div className="saritha-products" style={{ padding: '20px', maxWidth: '1400px', margin: '0 auto' }}>
+    <div className="modern-products-container">
       {/* Toast */}
       {showToast.show && (
-        <div style={{
-          position: 'fixed', top: '20px', right: '20px', zIndex: 3000,
-          padding: '14px 20px', borderRadius: '10px', color: 'white',
-          background: showToast.type === 'success' ? '#4caf50' : '#ef4444',
-          display: 'flex', alignItems: 'center', gap: '10px',
-          boxShadow: '0 8px 25px rgba(0,0,0,0.2)', fontWeight: 500
-        }}>
+        <div className={`modern-toast ${showToast.type}`}>
           <span>{showToast.message}</span>
-          <button onClick={() => setShowToast({ show: false })} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', cursor: 'pointer', padding: '2px 8px', borderRadius: '50%' }}>×</button>
+          <button onClick={() => setShowToast({ show: false })}>×</button>
         </div>
       )}
 
-      {/* Header */}
-      <div style={{
-        background: 'linear-gradient(135deg, #1a472a, #2d6a4f)',
-        color: 'white', padding: '24px 28px', borderRadius: '16px',
-        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        marginBottom: '24px', flexWrap: 'wrap', gap: '12px'
-      }}>
-        <div>
-          <h1 style={{ margin: 0, fontSize: '24px' }}>🍀 Our Products</h1>
-          <p style={{ margin: '4px 0 0', opacity: 0.8, fontSize: '14px' }}>Manage your dairy products catalog</p>
+      {/* Hero Header */}
+      <div className="products-hero">
+        <div className="hero-content">
+          <div className="hero-icon">🍀</div>
+          <div>
+            <h1>Product Catalog</h1>
+            <p>{products.length} products • Manage your dairy catalog</p>
+          </div>
         </div>
-        <button onClick={() => { setEditingProduct(null); resetForm(); setShowAddModal(true); }}
-          style={{
-            padding: '12px 24px', background: '#4caf50', color: 'white',
-            border: 'none', borderRadius: '10px', cursor: 'pointer',
-            fontWeight: 600, fontSize: '14px', whiteSpace: 'nowrap'
-          }}>
-          + Add New Product
-        </button>
+        <div className="hero-actions">
+          <div className="view-toggle">
+            <button className={`view-btn ${viewMode === 'grid' ? 'active' : ''}`} onClick={() => setViewMode('grid')} title="Grid View">⊞</button>
+            <button className={`view-btn ${viewMode === 'list' ? 'active' : ''}`} onClick={() => setViewMode('list')} title="List View">☰</button>
+          </div>
+          <button className="add-product-btn" onClick={() => { setEditingProduct(null); resetForm(); setShowAddModal(true); }}>
+            <span>+</span> Add Product
+          </button>
+        </div>
       </div>
 
-      {/* Search */}
-      <div style={{ marginBottom: '20px', position: 'relative' }}>
-        <span style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)' }}>🔍</span>
+      {/* Search Bar */}
+      <div className="products-search-bar">
+        <span className="search-icon">🔍</span>
         <input
           type="text"
-          placeholder="Search products..."
+          placeholder="Search products by name..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          style={{
-            width: '100%', padding: '14px 14px 14px 42px',
-            border: '2px solid #e0e0e0', borderRadius: '12px',
-            fontSize: '14px', background: 'white'
-          }}
         />
         {searchTerm && (
-          <button onClick={() => setSearchTerm('')}
-            style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', background: '#eee', border: 'none', width: '24px', height: '24px', borderRadius: '50%', cursor: 'pointer' }}>
-            ×
-          </button>
+          <button className="search-clear" onClick={() => setSearchTerm('')}>×</button>
         )}
+        <span className="search-results">{filteredProducts.length} of {products.length}</span>
       </div>
 
-      {/* Products Grid with Images */}
+      {/* Content */}
       {loading ? (
-        <div style={{ textAlign: 'center', padding: '60px', color: '#666' }}>
-          <div style={{ fontSize: '40px', marginBottom: '10px' }}>🥛</div>
+        <div className="products-loading">
+          <div className="loading-pulse">
+            <span>🥛</span>
+          </div>
           <p>Loading products...</p>
         </div>
       ) : filteredProducts.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '60px', color: '#666', background: 'white', borderRadius: '16px' }}>
-          <div style={{ fontSize: '50px', marginBottom: '12px' }}>📦</div>
-          <h3>No products found</h3>
-          <p>{searchTerm ? 'Try a different search' : 'Add your first product'}</p>
+        <div className="products-empty">
+          <div className="empty-illustration">
+            <span>📦</span>
+            <div className="empty-shadow"></div>
+          </div>
+          <h3>{searchTerm ? 'No products match your search' : 'No products yet'}</h3>
+          <p>{searchTerm ? 'Try a different search term' : 'Click "Add Product" to create your first product'}</p>
+          {!searchTerm && (
+            <button onClick={() => { resetForm(); setShowAddModal(true); }}>+ Add Your First Product</button>
+          )}
         </div>
-      ) : (
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
-          gap: '20px'
-        }}>
+      ) : viewMode === 'grid' ? (
+        /* ========== GRID VIEW ========== */
+        <div className="products-grid">
           {filteredProducts.map(product => {
             const packs = formatPacks(product.packs);
-            // ✅ FIXED: Use BASE_URL for images (no /api)
             const imageUrl = product.image_url ? `${BASE_URL}${product.image_url}` : null;
+            const color = getProductColor(product.name);
             
             return (
-              <div key={product.id} style={{
-                background: 'white',
-                borderRadius: '16px',
-                overflow: 'hidden',
-                boxShadow: '0 2px 12px rgba(0,0,0,0.06)',
-                border: '1px solid #eee',
-                transition: 'all 0.2s'
-              }}>
-                {/* Product Image */}
-                <div style={{
-                  width: '100%',
-                  height: '200px',
-                  overflow: 'hidden',
-                  position: 'relative',
-                  background: '#f9fafb',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center'
-                }}>
+              <div key={product.id} className="product-card">
+                <div className="product-card-image" style={{ background: color.grad }}>
                   {imageUrl ? (
-                    <img
-                      src={imageUrl}
-                      alt={product.name}
-                      style={{
-                        width: '100%',
-                        height: '100%',
-                        objectFit: 'cover'
-                      }}
-                      onError={(e) => {
-                        e.target.style.display = 'none';
-                        e.target.parentElement.innerHTML = `<div style="font-size:60px">${getProductIcon(product.name)}</div>`;
-                      }}
-                    />
+                    <img src={imageUrl} alt={product.name} onError={(e) => { e.target.style.display = 'none'; }} />
                   ) : (
-                    <div style={{ fontSize: '60px' }}>{getProductIcon(product.name)}</div>
+                    <span className="product-card-icon">{getProductIcon(product.name)}</span>
                   )}
-                  
-                  {/* Action Buttons Overlay */}
-                  <div style={{
-                    position: 'absolute',
-                    top: '10px',
-                    right: '10px',
-                    display: 'flex',
-                    gap: '6px',
-                    opacity: 0.85
-                  }}>
-                    <button onClick={() => handleEdit(product)}
-                      style={{
-                        width: '36px', height: '36px', borderRadius: '50%',
-                        background: '#2196f3', color: 'white', border: 'none',
-                        cursor: 'pointer', fontSize: '16px', display: 'flex',
-                        alignItems: 'center', justifyContent: 'center'
-                      }} title="Edit">✏️</button>
-                    <button onClick={() => handleDelete(product.id, product.name)}
-                      style={{
-                        width: '36px', height: '36px', borderRadius: '50%',
-                        background: '#f44336', color: 'white', border: 'none',
-                        cursor: 'pointer', fontSize: '16px', display: 'flex',
-                        alignItems: 'center', justifyContent: 'center'
-                      }} title="Delete">🗑️</button>
+                  <div className="product-card-overlay">
+                    <button onClick={() => handleEdit(product)} className="overlay-btn edit" title="Edit">✏️</button>
+                    <button onClick={() => handleDelete(product.id, product.name)} className="overlay-btn delete" title="Delete">🗑️</button>
                   </div>
                 </div>
-
-                {/* Product Info */}
-                <div style={{ padding: '16px' }}>
-                  <h3 style={{ margin: '0 0 12px', color: '#1a472a', fontSize: '18px', textAlign: 'center' }}>
-                    {product.name}
-                  </h3>
-                  
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <div className="product-card-body">
+                  <h3 className="product-card-name">{product.name}</h3>
+                  <div className="product-card-packs">
                     {packs.map((pack, idx) => (
-                      <div key={idx} style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        padding: '8px 12px',
-                        background: '#f0fdf4',
-                        borderRadius: '8px',
-                        fontSize: '14px'
-                      }}>
-                        <span style={{ fontWeight: 500, color: '#333' }}>
-                          {pack.size}{pack.unit}
-                        </span>
-                        <span style={{ fontWeight: 700, color: '#4caf50' }}>
-                          ₹{pack.price}
-                        </span>
+                      <div key={idx} className="pack-row">
+                        <span className="pack-size">{pack.size}{pack.unit}</span>
+                        <span className="pack-price">₹{pack.price}</span>
                       </div>
                     ))}
                   </div>
@@ -405,134 +331,120 @@ const Products = () => {
             );
           })}
         </div>
+      ) : (
+        /* ========== LIST VIEW ========== */
+        <div className="products-list">
+          {filteredProducts.map(product => {
+            const packs = formatPacks(product.packs);
+            const imageUrl = product.image_url ? `${BASE_URL}${product.image_url}` : null;
+            const color = getProductColor(product.name);
+            
+            return (
+              <div key={product.id} className="product-list-item">
+                <div className="list-item-image" style={{ background: color.bg }}>
+                  {imageUrl ? (
+                    <img src={imageUrl} alt={product.name} onError={(e) => { e.target.style.display = 'none'; }} />
+                  ) : (
+                    <span>{getProductIcon(product.name)}</span>
+                  )}
+                </div>
+                <div className="list-item-info">
+                  <h3>{product.name}</h3>
+                  <div className="list-item-packs">
+                    {packs.map((pack, idx) => (
+                      <span key={idx} className="list-pack-tag">{pack.size}{pack.unit} - ₹{pack.price}</span>
+                    ))}
+                  </div>
+                </div>
+                <div className="list-item-actions">
+                  <button onClick={() => handleEdit(product)} className="list-action-btn edit">✏️ Edit</button>
+                  <button onClick={() => handleDelete(product.id, product.name)} className="list-action-btn delete">🗑️</button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
       )}
 
-      {/* Add/Edit Modal with Image Upload */}
+      {/* Add/Edit Modal */}
       {showAddModal && (
-        <div style={{
-          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          zIndex: 2000, padding: '20px'
-        }} onClick={() => { setShowAddModal(false); setEditingProduct(null); }}>
-          <div style={{
-            background: 'white', borderRadius: '16px', padding: '28px',
-            width: '100%', maxWidth: '550px', maxHeight: '85vh', overflow: 'auto'
-          }} onClick={(e) => e.stopPropagation()}>
-            
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-              <h2 style={{ margin: 0, color: '#1a472a', fontSize: '20px' }}>
-                {editingProduct ? '✏️ Edit Product' : '✨ Add New Product'}
-              </h2>
-              <button onClick={() => { setShowAddModal(false); setEditingProduct(null); }}
-                style={{ background: '#f0f0f0', border: 'none', width: '32px', height: '32px', borderRadius: '50%', cursor: 'pointer', fontSize: '18px' }}>✕</button>
+        <div className="modal-overlay" onClick={() => { setShowAddModal(false); setEditingProduct(null); }}>
+          <div className="modal-container" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>{editingProduct ? '✏️ Edit Product' : '✨ Add New Product'}</h2>
+              <button className="modal-close" onClick={() => { setShowAddModal(false); setEditingProduct(null); }}>✕</button>
             </div>
 
-            <form onSubmit={handleSubmit}>
+            <form onSubmit={handleSubmit} className="modal-form">
               {/* Product Name */}
-              <div style={{ marginBottom: '18px' }}>
-                <label style={{ display: 'block', marginBottom: '6px', fontWeight: 600, color: '#444', fontSize: '14px' }}>
-                  🏷️ Product Name *
-                </label>
+              <div className="form-group">
+                <label>🏷️ Product Name *</label>
                 <input
                   type="text"
                   value={formData.name}
                   onChange={(e) => setFormData({...formData, name: e.target.value})}
                   required
                   placeholder="e.g., Fresh Milk, Cream, Paneer"
-                  style={{
-                    width: '100%', padding: '12px', border: '2px solid #e0e0e0',
-                    borderRadius: '10px', fontSize: '14px'
-                  }}
+                  autoFocus
                 />
               </div>
 
               {/* Pack Sizes */}
-              <div style={{ marginBottom: '18px' }}>
-                <label style={{ display: 'block', marginBottom: '6px', fontWeight: 600, color: '#444', fontSize: '14px' }}>
-                  📦 Pack Sizes & Prices *
-                </label>
-                {formData.packs.map((pack, index) => (
-                  <div key={index} style={{ display: 'flex', gap: '8px', marginBottom: '8px', alignItems: 'center' }}>
-                    <input type="number" placeholder="Size" value={pack.size}
-                      onChange={(e) => handlePackChange(index, 'size', e.target.value)}
-                      style={{ flex: 1, padding: '10px', border: '1px solid #e0e0e0', borderRadius: '8px', fontSize: '13px' }} />
-                    <select value={pack.unit}
-                      onChange={(e) => handlePackChange(index, 'unit', e.target.value)}
-                      style={{ padding: '10px', border: '1px solid #e0e0e0', borderRadius: '8px', fontSize: '13px' }}>
-                      <option value="ml">ml</option>
-                      <option value="L">L</option>
-                      <option value="g">g</option>
-                      <option value="kg">kg</option>
-                    </select>
-                    <span style={{ fontWeight: 600 }}>₹</span>
-                    <input type="number" placeholder="Price" value={pack.price}
-                      onChange={(e) => handlePackChange(index, 'price', e.target.value)}
-                      style={{ flex: 1, padding: '10px', border: '1px solid #e0e0e0', borderRadius: '8px', fontSize: '13px' }} />
-                    {formData.packs.length > 1 && (
-                      <button type="button" onClick={() => removePackSize(index)}
-                        style={{ background: '#ffebee', border: 'none', color: '#c62828', width: '28px', height: '28px', borderRadius: '50%', cursor: 'pointer', fontSize: '14px' }}>✕</button>
-                    )}
-                  </div>
-                ))}
-                <button type="button" onClick={addPackSize}
-                  style={{
-                    width: '100%', padding: '10px', background: 'none',
-                    border: '2px dashed #4caf50', color: '#4caf50',
-                    borderRadius: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '13px'
-                  }}>+ Add Another Size</button>
+              <div className="form-group">
+                <label>📦 Pack Sizes & Prices *</label>
+                <div className="packs-container">
+                  {formData.packs.map((pack, index) => (
+                    <div key={index} className="pack-input-row">
+                      <input type="number" placeholder="Size" value={pack.size}
+                        onChange={(e) => handlePackChange(index, 'size', e.target.value)} />
+                      <select value={pack.unit}
+                        onChange={(e) => handlePackChange(index, 'unit', e.target.value)}>
+                        <option value="ml">ml</option>
+                        <option value="L">L</option>
+                        <option value="g">g</option>
+                        <option value="kg">kg</option>
+                      </select>
+                      <span className="pack-currency">₹</span>
+                      <input type="number" placeholder="Price" value={pack.price}
+                        onChange={(e) => handlePackChange(index, 'price', e.target.value)} />
+                      {formData.packs.length > 1 && (
+                        <button type="button" className="pack-remove-btn" onClick={() => removePackSize(index)}>✕</button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <button type="button" className="add-pack-btn" onClick={addPackSize}>
+                  + Add Another Size
+                </button>
               </div>
 
-              {/* ✅ Image Upload Section */}
-              <div style={{ marginBottom: '20px' }}>
-                <label style={{ display: 'block', marginBottom: '6px', fontWeight: 600, color: '#444', fontSize: '14px' }}>
-                  🖼️ Product Image
-                </label>
+              {/* Image Upload */}
+              <div className="form-group">
+                <label>🖼️ Product Image</label>
                 
                 {formData.imagePreview ? (
-                  <div style={{ position: 'relative', borderRadius: '12px', overflow: 'hidden', marginBottom: '10px' }}>
-                    <img
-                      src={formData.imagePreview}
-                      alt="Preview"
-                      style={{ width: '100%', height: '200px', objectFit: 'cover', borderRadius: '12px' }}
-                    />
-                    <button type="button" onClick={() => setFormData({...formData, image: null, imagePreview: ''})}
-                      style={{
-                        position: 'absolute', top: '10px', right: '10px',
-                        background: '#f44336', color: 'white', border: 'none',
-                        padding: '6px 12px', borderRadius: '6px', cursor: 'pointer',
-                        fontWeight: 600, fontSize: '12px'
-                      }}>
-                      Remove
+                  <div className="image-preview-container">
+                    <img src={formData.imagePreview} alt="Preview" />
+                    <button type="button" className="image-remove-btn" onClick={() => setFormData({...formData, image: null, imagePreview: ''})}>
+                      Remove Image
                     </button>
                   </div>
                 ) : (
-                  <label style={{
-                    display: 'flex', flexDirection: 'column', alignItems: 'center',
-                    justifyContent: 'center', padding: '40px',
-                    border: '2px dashed #e0e0e0', borderRadius: '12px',
-                    cursor: 'pointer', background: '#fafafa', transition: 'all 0.2s'
-                  }}>
-                    <div style={{ fontSize: '40px', marginBottom: '8px' }}>📷</div>
-                    <div style={{ fontWeight: 600, color: '#666', fontSize: '14px' }}>Click to upload image</div>
-                    <div style={{ color: '#999', fontSize: '12px', marginTop: '4px' }}>PNG, JPG up to 5MB</div>
+                  <label className="image-upload-zone">
+                    <div className="upload-icon">📷</div>
+                    <div className="upload-text">Click to upload image</div>
+                    <div className="upload-hint">PNG, JPG up to 5MB</div>
                     <input type="file" accept="image/*" onChange={handleImageChange} hidden />
                   </label>
                 )}
               </div>
 
-              {/* Submit Buttons */}
-              <div style={{ display: 'flex', gap: '12px', marginTop: '24px' }}>
-                <button type="button" onClick={() => { setShowAddModal(false); setEditingProduct(null); }}
-                  style={{
-                    flex: 1, padding: '14px', background: '#f0f0f0', border: 'none',
-                    borderRadius: '10px', cursor: 'pointer', fontWeight: 600, fontSize: '14px', color: '#666'
-                  }}>Cancel</button>
-                <button type="submit" disabled={submitting}
-                  style={{
-                    flex: 1, padding: '14px', background: '#4caf50', color: 'white',
-                    border: 'none', borderRadius: '10px', cursor: 'pointer',
-                    fontWeight: 700, fontSize: '14px', opacity: submitting ? 0.7 : 1
-                  }}>
+              {/* Buttons */}
+              <div className="modal-actions">
+                <button type="button" className="btn-cancel" onClick={() => { setShowAddModal(false); setEditingProduct(null); }}>
+                  Cancel
+                </button>
+                <button type="submit" className="btn-save" disabled={submitting}>
                   {submitting ? '⏳ Saving...' : editingProduct ? '💾 Update Product' : '✅ Add Product'}
                 </button>
               </div>
