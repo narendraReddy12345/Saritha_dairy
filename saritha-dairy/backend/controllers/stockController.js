@@ -1,3 +1,4 @@
+// backend/routes/stock.js
 const pool = require('../config/db');
 
 exports.getAll = async (req, res) => {
@@ -30,6 +31,9 @@ exports.sell = async (req, res) => {
     if (result.rows.length === 0) {
       return res.json({ success: false, error: 'Product not found or insufficient stock' });
     }
+    
+    // Clean up zero quantity items
+    await pool.query('DELETE FROM store_stock WHERE quantity <= 0');
     
     res.json({ success: true, message: 'Product sold successfully' });
   } catch (error) {
