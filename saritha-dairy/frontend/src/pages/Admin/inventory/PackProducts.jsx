@@ -16,6 +16,12 @@ const PackProducts = () => {
   const [packConfig, setPackConfig] = useState([]);
   const [message, setMessage] = useState(null);
   const [activeTab, setActiveTab] = useState('pack');
+  
+  // Manual Paneer Packing State
+  const [showPaneerModal, setShowPaneerModal] = useState(false);
+  const [paneerPacks, setPaneerPacks] = useState([]);
+  const [customWeight, setCustomWeight] = useState('');
+  const [customPrice, setCustomPrice] = useState('');
 
   useEffect(() => {
     fetchAvailablePurchases();
@@ -23,9 +29,7 @@ const PackProducts = () => {
     fetchPackingHistory();
   }, []);
 
-  // ✅ Get auth token
   const getToken = () => sessionStorage.getItem('authToken');
-
   const getAuthHeaders = () => ({
     'Content-Type': 'application/json',
     'Authorization': `Bearer ${getToken()}`
@@ -67,14 +71,10 @@ const PackProducts = () => {
       const response = await fetch(`${API_URL}/products`, {
         headers: getAuthHeaders()
       });
-      
       if (response.status === 401) return;
-      
       const result = await response.json();
       if (result.success) setProducts(result.data);
-    } catch (error) {
-      console.error('Error:', error);
-    }
+    } catch (error) { console.error('Error:', error); }
   };
 
   const fetchPackingHistory = async () => {
@@ -82,14 +82,10 @@ const PackProducts = () => {
       const response = await fetch(`${API_URL}/packing-history`, {
         headers: getAuthHeaders()
       });
-      
       if (response.status === 401) return;
-      
       const result = await response.json();
       if (result.success) setPackingHistory(result.data);
-    } catch (error) {
-      console.error('Error:', error);
-    }
+    } catch (error) { console.error('Error:', error); }
   };
 
   const getProductPacks = (productName) => {
@@ -97,9 +93,7 @@ const PackProducts = () => {
     if (product && product.packs) {
       try {
         return typeof product.packs === 'string' ? JSON.parse(product.packs) : product.packs;
-      } catch (e) {
-        return [];
-      }
+      } catch (e) { return []; }
     }
     return [];
   };
@@ -115,9 +109,7 @@ const PackProducts = () => {
 
   const updatePacketCount = (index, count) => {
     const updated = [...packConfig];
-    const newCount = parseInt(count) || 0;
-    updated[index].packetCount = newCount;
-    
+    updated[index].packetCount = parseInt(count) || 0;
     const totalToPack = calculateTotalQuantity(updated);
     const availableQty = parseFloat(selectedPurchase.remaining_quantity || selectedPurchase.quantity);
     
@@ -125,16 +117,13 @@ const PackProducts = () => {
       showMessage(`Cannot exceed available quantity! Available: ${availableQty} ${selectedPurchase.unit}`, 'error');
       return;
     }
-    
     setPackConfig(updated);
   };
 
   const calculateTotalQuantity = (config = packConfig) => {
     if (!selectedPurchase) return 0;
-    
     return config.reduce((total, pack) => {
       let packQuantity = parseFloat(pack.size);
-      
       if (selectedPurchase.unit === 'Kg' || selectedPurchase.unit === 'kg') {
         if (pack.unit === 'g') packQuantity = pack.size / 1000;
         else if (pack.unit === 'kg') packQuantity = pack.size;
@@ -142,7 +131,6 @@ const PackProducts = () => {
         if (pack.unit === 'ml') packQuantity = pack.size / 1000;
         else if (pack.unit === 'L') packQuantity = pack.size;
       }
-      
       return total + (pack.packetCount * packQuantity);
     }, 0);
   };
@@ -151,9 +139,118 @@ const PackProducts = () => {
     setPackConfig(packConfig.filter((_, i) => i !== index));
   };
 
+  // ==================== MANUAL PANEER PACKING ====================
+
+  const openPaneerPacking = (purchase) => {
+    setSelectedPurchase(purchase);
+    setPaneerPacks([]);
+    setCustomWeight('');
+    setCustomPrice('');
+    setShowPaneerModal(true);
+  };
+
+  const addPaneerPack = () => {
+    if (!customWeight || parseFloat(customWeight) <= 0) {
+      showMessage('Please enter valid weight', 'error');
+      return;
+    }
+    if (!customPrice || parseFloat(customPrice) <= 0) {
+      showMessage('Please enter valid price', 'error');
+      return;
+    }
+
+    const weight = parseFloat(customWeight);
+    const totalQty = paneerPacks.reduce((s, p) => s + p.weight, 0) + weight;
+    const availableQty = parseFloat(selectedPurchase.remaining_quantity || selectedPurchase.quantity);
+    
+    if (totalQty > availableQty) {
+      showMessage(`Cannot exceed available quantity! Available: ${availableQty} ${selectedPurchase.unit}`, 'error');
+      return;
+    }
+
+    setPaneerPacks([...paneerPacks, {
+      id: Date.now(),
+      weight: weight,
+      price: parseFloat(customPrice),
+      total: weight * parseFloat(customPrice)
+    }]);
+
+    setCustomWeight('');
+    setCustomPrice('');
+    showMessage('✅ Piece added!');
+  };
+
+  const removePaneerPack = (id) => {
+    setPaneerPacks(paneerPacks.filter(p => p.id !== id));
+  };
+
+  const handlePaneerPack = async () => {
+    if (paneerPacks.length === 0) {
+      showMessage('Please add at least one piece', 'error');
+      return;
+    }
+
+    setPacking(true);
+    
+    const totalWeight = paneerPacks.reduce((s, p) => s + p.weight, 0);
+    const totalAmount = paneerPacks.reduce((s, p) => s + p.total, 0);
+    const batchNumber = `PNR-${Date.now().toString().slice(-6)}`;
+    const packedDate = new Date().toISOString().split('T')[0];
+    
+    const paneerData = {
+      batchNumber,
+      productName: selectedPurchase.product_name,
+      purchaseId: selectedPurchase.id,
+      packedDate,
+      packType: 'manual_paneer',
+      items: paneerPacks.map((p, index) => ({
+        packDisplay: `Piece ${index + 1} - ${p.weight}${selectedPurchase.unit || 'Kg'}`,
+        count: 1,
+        price: p.price,
+        cutWeight: p.weight,
+        total: p.total
+      })),
+      totalPackets: paneerPacks.length,
+      totalQuantity: totalWeight,
+      totalAmount: totalAmount,
+      remainingQuantity: parseFloat(selectedPurchase.remaining_quantity || selectedPurchase.quantity) - totalWeight,
+      unit: selectedPurchase.unit
+    };
+
+    try {
+      const response = await fetch(`${API_URL}/pack-products`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(paneerData)
+      });
+      const result = await response.json();
+      
+      if (result.success) {
+        showMessage(`✅ Packed ${paneerPacks.length} pieces! (${totalWeight.toFixed(2)} ${selectedPurchase.unit})`);
+        setShowPaneerModal(false);
+        setPaneerPacks([]);
+        setSelectedPurchase(null);
+        await fetchAvailablePurchases();
+        await fetchPackingHistory();
+      } else {
+        showMessage(result.error || 'Failed to pack', 'error');
+      }
+    } catch (error) {
+      showMessage('Error connecting to server', 'error');
+    }
+    setPacking(false);
+  };
+
   const handlePack = async () => {
     if (!selectedPurchase) {
       showMessage('Please select a purchase first', 'error');
+      return;
+    }
+
+    // Check if it's Paneer - open manual mode
+    const isPaneer = selectedPurchase.product_name?.toLowerCase().includes('paneer');
+    if (isPaneer) {
+      openPaneerPacking(selectedPurchase);
       return;
     }
 
@@ -261,10 +358,7 @@ const PackProducts = () => {
     return '#64748b';
   };
 
-  const getNumericValue = (value) => {
-    const num = parseFloat(value);
-    return isNaN(num) ? 0 : num;
-  };
+  const getNumericValue = (value) => parseFloat(value) || 0;
 
   const formatDate = (dateString) => {
     return new Date(dateString).toLocaleDateString('en-IN', {
@@ -317,20 +411,27 @@ const PackProducts = () => {
                 {purchases.map(purchase => {
                   const availableQty = getNumericValue(purchase.remaining_quantity || purchase.quantity);
                   const color = getProductColor(purchase.product_name);
+                  const isPaneer = purchase.product_name?.toLowerCase().includes('paneer');
                   
                   return (
                     <div
                       key={purchase.id}
                       className={`stock-app-item ${selectedPurchase?.id === purchase.id ? 'selected' : ''}`}
-                      onClick={() => { setSelectedPurchase(purchase); setPackConfig([]); }}
+                      onClick={() => { 
+                        setSelectedPurchase(purchase); 
+                        setPackConfig([]);
+                      }}
                     >
                       <div className="stock-app-icon" style={{ background: color + '15' }}>
                         {getProductIcon(purchase.product_name)}
                       </div>
-                      <div className="stock-app-name">{purchase.product_name}</div>
+                      <div className="stock-app-name">
+                        {purchase.product_name}
+                        {isPaneer && <span className="paneer-badge">🧀 Manual</span>}
+                      </div>
                       <div className="stock-app-quantity">
-                        <span className="stock-app-number">{availableQty.toFixed(1)}</span>
-                        <span className="stock-app-unit">{purchase.unit || 'L'}</span>
+                        <span className="stock-app-number">{availableQty.toFixed(2)}</span>
+                        <span className="stock-app-unit">{purchase.unit || 'Kg'}</span>
                       </div>
                       {selectedPurchase?.id === purchase.id && <div className="stock-app-check">✓</div>}
                     </div>
@@ -375,21 +476,20 @@ const PackProducts = () => {
                     <div className="pack-list">
                       {packConfig.map((pack, index) => {
                         let packQuantity = parseFloat(pack.size);
-                        if (selectedPurchase.unit === 'Kg' && pack.unit === 'g') packQuantity = pack.size / 1000;
-                        else if (selectedPurchase.unit === 'Litre' && pack.unit === 'ml') packQuantity = pack.size / 1000;
-                        const totalLiters = pack.packetCount * packQuantity;
+                        if ((selectedPurchase.unit === 'Kg' || selectedPurchase.unit === 'kg') && pack.unit === 'g') packQuantity = pack.size / 1000;
+                        else if ((selectedPurchase.unit === 'Litre' || selectedPurchase.unit === 'L') && pack.unit === 'ml') packQuantity = pack.size / 1000;
+                        const total = pack.packetCount * packQuantity;
                         
                         return (
                           <div key={index} className="pack-item">
                             <div className="pack-details">
                               <span className="pack-size-name">{pack.size}{pack.unit}</span>
                               <span className="pack-price">₹{pack.price}</span>
-                              <span className="pack-convert">({packQuantity.toFixed(3)} {selectedPurchase.unit})</span>
                             </div>
                             <div className="pack-control">
                               <input type="number" className="pack-count" value={pack.packetCount}
                                 onChange={(e) => updatePacketCount(index, e.target.value)} placeholder="Qty" min="0" />
-                              <span className="pack-total">= {totalLiters.toFixed(3)} {selectedPurchase.unit}</span>
+                              <span className="pack-total">= {total.toFixed(3)} {selectedPurchase.unit}</span>
                               <button className="pack-remove" onClick={() => removePackConfig(index)}>✕</button>
                             </div>
                           </div>
@@ -400,7 +500,6 @@ const PackProducts = () => {
                     <div className="pack-summary">
                       <div className="summary-line"><span>📦 To Pack:</span><strong>{calculateTotalQuantity().toFixed(3)} {selectedPurchase.unit}</strong></div>
                       <div className="summary-line"><span>🎯 Packets:</span><strong>{packConfig.reduce((sum, p) => sum + p.packetCount, 0)} packets</strong></div>
-                      <div className="summary-line"><span>📊 Remaining:</span><strong>{(getNumericValue(selectedPurchase.remaining_quantity || selectedPurchase.quantity) - calculateTotalQuantity()).toFixed(3)} {selectedPurchase.unit}</strong></div>
                     </div>
 
                     <button className="pack-submit" onClick={handlePack} disabled={packing || calculateTotalQuantity() === 0}>
@@ -408,8 +507,116 @@ const PackProducts = () => {
                     </button>
                   </>
                 )}
+
+                {packConfig.length === 0 && (
+                  <button className="pack-submit paneer-pack-btn" onClick={handlePack}>
+                    🧀 Manual Cutting
+                  </button>
+                )}
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ==================== MANUAL PANEER PACKING MODAL ==================== */}
+      {showPaneerModal && selectedPurchase && (
+        <div className="cr-modal" onClick={() => setShowPaneerModal(false)}>
+          <div className="cr-modal-box cr-modal-lg" onClick={e => e.stopPropagation()}>
+            <div className="cr-modal-head">
+              <h2>🧀 Manual Paneer Cutting & Packing</h2>
+              <button className="cr-close" onClick={() => setShowPaneerModal(false)}>✕</button>
+            </div>
+            <div className="cr-modal-body">
+              <div className="paneer-info-bar">
+                <span>🧀 {selectedPurchase.product_name}</span>
+                <span>Available: {getNumericValue(selectedPurchase.remaining_quantity || selectedPurchase.quantity).toFixed(2)} {selectedPurchase.unit}</span>
+              </div>
+
+              {/* Add Piece Form */}
+              <div className="paneer-add-form">
+                <h4>➕ Add Cut Piece</h4>
+                
+                <div className="paneer-row">
+                  <div className="paneer-field">
+                    <label>Weight ({selectedPurchase.unit})</label>
+                    <input 
+                      type="number" 
+                      step="0.01"
+                      placeholder="e.g. 0.75" 
+                      value={customWeight}
+                      onChange={(e) => setCustomWeight(e.target.value)}
+                      autoFocus
+                    />
+                  </div>
+                  <div className="paneer-field">
+                    <label>Price/Kg (₹)</label>
+                    <input 
+                      type="number" 
+                      placeholder="e.g. 320" 
+                      value={customPrice}
+                      onChange={(e) => setCustomPrice(e.target.value)}
+                    />
+                  </div>
+                  <button className="paneer-add-btn" onClick={addPaneerPack}>
+                    + Add
+                  </button>
+                </div>
+              </div>
+
+              {/* Pieces List */}
+              {paneerPacks.length > 0 && (
+                <div className="paneer-pieces-list">
+                  <h4>📋 Cut Pieces ({paneerPacks.length})</h4>
+                  <div className="paneer-pieces-table">
+                    <div className="paneer-piece-header">
+                      <span>#</span>
+                      <span>Weight</span>
+                      <span>Price/Kg</span>
+                      <span>Total</span>
+                      <span></span>
+                    </div>
+                    {paneerPacks.map((piece, index) => (
+                      <div key={piece.id} className="paneer-piece-row">
+                        <span className="piece-number">Piece {index + 1}</span>
+                        <span className="piece-weight">{piece.weight} {selectedPurchase.unit}</span>
+                        <span className="piece-price">₹{piece.price}</span>
+                        <span className="piece-total">₹{piece.total.toFixed(0)}</span>
+                        <button className="piece-remove" onClick={() => removePaneerPack(piece.id)}>✕</button>
+                      </div>
+                    ))}
+                  </div>
+                  
+                  <div className="paneer-summary">
+                    <div className="paneer-summary-row">
+                      <span>Total Pieces:</span>
+                      <strong>{paneerPacks.length}</strong>
+                    </div>
+                    <div className="paneer-summary-row">
+                      <span>Total Weight:</span>
+                      <strong>{paneerPacks.reduce((s, p) => s + p.weight, 0).toFixed(2)} {selectedPurchase.unit}</strong>
+                    </div>
+                    <div className="paneer-summary-row">
+                      <span>Total Amount:</span>
+                      <strong>₹{paneerPacks.reduce((s, p) => s + p.total, 0).toFixed(0)}</strong>
+                    </div>
+                    <div className="paneer-summary-row">
+                      <span>Remaining:</span>
+                      <strong>{(getNumericValue(selectedPurchase.remaining_quantity || selectedPurchase.quantity) - paneerPacks.reduce((s, p) => s + p.weight, 0)).toFixed(2)} {selectedPurchase.unit}</strong>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <button 
+                className="pack-submit" 
+                onClick={handlePaneerPack} 
+                disabled={packing || paneerPacks.length === 0}
+                style={{ marginTop: '16px' }}
+              >
+                {packing ? '⏳ Packing...' : `🧀 Pack ${paneerPacks.length} Pieces`}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -429,7 +636,7 @@ const PackProducts = () => {
                 <thead>
                   <tr>
                     <th>Date</th><th>Batch No</th><th>Product</th>
-                    <th>Packets</th><th>Quantity</th><th>Items</th><th>Action</th>
+                    <th>Packets</th><th>Quantity</th><th>Details</th><th>Action</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -439,16 +646,16 @@ const PackProducts = () => {
                       <td><code className="batch-code">{record.batch_number}</code></td>
                       <td>{record.product_name}</td>
                       <td>{record.total_packets}</td>
-                      <td>{parseFloat(record.total_quantity).toFixed(2)} {record.unit || 'L'}</td>
+                      <td>{parseFloat(record.total_quantity).toFixed(2)} {record.unit || 'Kg'}</td>
                       <td>
                         <div className="items-list">
                           {record.items?.map((item, i) => (
-                            <span key={i} className="item-badge">{item.count}×{item.packDisplay}</span>
+                            <span key={i} className="item-badge">{item.packDisplay}</span>
                           ))}
                         </div>
                       </td>
                       <td>
-                        <button className="delete-btn" onClick={() => deleteHistory(record.id)}>🗑️ Delete</button>
+                        <button className="delete-btn" onClick={() => deleteHistory(record.id)}>🗑️</button>
                       </td>
                     </tr>
                   ))}
