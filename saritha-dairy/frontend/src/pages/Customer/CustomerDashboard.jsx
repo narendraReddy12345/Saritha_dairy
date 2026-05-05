@@ -69,17 +69,17 @@ const CustomerDashboard = () => {
     }
   }, [confetti]);
 
-  // ✅ Helper to parse orders safely
-  const parseOrders = (ordersData) => {
-    if (!ordersData) return [];
-    if (Array.isArray(ordersData)) return ordersData;
-    if (typeof ordersData === 'string') {
-      try {
-        const parsed = JSON.parse(ordersData);
-        return Array.isArray(parsed) ? parsed : [];
-      } catch (e) { return []; }
+  // ✅ Helper to parse JSON safely
+  const safeParse = (data, fallback = []) => {
+    if (!data) return fallback;
+    if (Array.isArray(data)) return data;
+    if (typeof data === 'string') {
+      try { 
+        const parsed = JSON.parse(data);
+        return Array.isArray(parsed) ? parsed : fallback;
+      } catch (e) { return fallback; }
     }
-    return [];
+    return fallback;
   };
 
   const fetchAllProducts = async () => {
@@ -100,130 +100,144 @@ const CustomerDashboard = () => {
   // ✅ Save orders to database
   const saveOrdersToDB = async (orders) => {
     try {
-      const res = await fetch(`${API_URL}/customer-preferences/${userData.id}`, {
+      await fetch(`${API_URL}/customer-preferences/${userData.id}`, {
         method: 'POST',
         headers: getAuthHeaders(),
         body: JSON.stringify({ 
           wantMilk: preferences.wantMilk,
           quantity: preferences.quantity,
           packSize: preferences.packSize,
-          skipDays: preferences.skipDays,
-          extraOrders: orders 
+          skipDays: preferences.skipDays || [],
+          extraOrders: orders || [] 
         })
       });
-      const data = await res.json();
-      console.log('💾 Orders saved to DB:', data.success);
     } catch (error) {
       console.error('Failed to save orders to DB:', error);
     }
   };
 
+  // ✅ Fallback to localStorage
+  const loadFromLocalStorage = () => {
+    const savedPrefs = localStorage.getItem(`milkPrefs_${userData.id}`);
+    if (savedPrefs) {
+      try {
+        const prefs = JSON.parse(savedPrefs);
+        setPreferences({
+          wantMilk: prefs.wantMilk ?? true,
+          quantity: prefs.quantity ?? 2,
+          packSize: prefs.packSize ?? '500ml',
+          skipDays: Array.isArray(prefs.skipDays) ? prefs.skipDays : []
+        });
+      } catch (e) {}
+    }
+    
+    const savedOrders = localStorage.getItem(`extraOrders_${userData.id}`);
+    if (savedOrders) {
+      try {
+        const orders = JSON.parse(savedOrders);
+        if (Array.isArray(orders)) {
+          setExtraOrders(orders.map(o => ({
+            ...o,
+            imageUrl: getImageUrl(o.imageUrl) || o.imageUrl
+          })));
+        }
+      } catch (e) {}
+    }
+  };
+
+  // ✅ FIXED: Load preferences with proper parsing
   const loadCustomerData = async () => {
     try {
       const res = await fetch(`${API_URL}/admin/customer-deliveries/${userData.id}`, { headers: getAuthHeaders() });
       const data = await res.json();
       if (data.success) setDeliveries(data.deliveries || []);
       
-      // ✅ Load preferences & orders from API (database)
       try {
         console.log('📡 Fetching preferences from API...');
         const prefRes = await fetch(`${API_URL}/customer-preferences/${userData.id}`, { headers: getAuthHeaders() });
         const prefData = await prefRes.json();
         
-        console.log('📦 Preferences API Response:', prefData);
+        console.log('📦 API Response:', prefData);
         
         if (prefData.success && prefData.data) {
-          setPreferences({
+          // ✅ Parse skipDays properly
+          const skipDays = safeParse(prefData.data.skip_days, []);
+          // ✅ Parse extra_orders properly
+          const orders = safeParse(prefData.data.extra_orders, []);
+          
+          console.log('🔄 Parsed skipDays:', skipDays);
+          console.log('🔄 Parsed orders count:', orders.length);
+          
+          // ✅ Set preferences with parsed values
+          const newPrefs = {
             wantMilk: prefData.data.want_milk ?? true,
             quantity: prefData.data.quantity ?? 2,
             packSize: prefData.data.pack_size ?? '500ml',
-            skipDays: parseOrders(prefData.data.skip_days)
-          });
+            skipDays: skipDays
+          };
+          setPreferences(newPrefs);
           
-          // ✅ Load orders from database
-          const orders = parseOrders(prefData.data.extra_orders);
-          console.log('🛒 Orders loaded from DB:', orders.length);
+          // Save parsed prefs to localStorage
+          localStorage.setItem(`milkPrefs_${userData.id}`, JSON.stringify(newPrefs));
           
+          // Set orders
           if (orders.length > 0) {
             const fixedOrders = orders.map(o => ({
               ...o,
               imageUrl: getImageUrl(o.imageUrl) || o.imageUrl
             }));
             setExtraOrders(fixedOrders);
-            // Update localStorage backup
             localStorage.setItem(`extraOrders_${userData.id}`, JSON.stringify(fixedOrders));
-          } else {
-            // Try localStorage as fallback
-            const savedOrders = localStorage.getItem(`extraOrders_${userData.id}`);
-            if (savedOrders) {
-              const localOrders = parseOrders(savedOrders);
-              if (localOrders.length > 0) {
-                console.log('📦 Loaded from localStorage:', localOrders.length);
-                const fixedOrders = localOrders.map(o => ({
-                  ...o,
-                  imageUrl: getImageUrl(o.imageUrl) || o.imageUrl
-                }));
-                setExtraOrders(fixedOrders);
-                // Migrate to DB
-                saveOrdersToDB(fixedOrders);
-              }
-            }
           }
         } else {
-          // No preferences in DB, try localStorage
           console.log('⚠️ No preferences in DB, checking localStorage');
-          const savedPrefs = localStorage.getItem(`milkPrefs_${userData.id}`);
-          if (savedPrefs) {
-            try { setPreferences(JSON.parse(savedPrefs)); } catch (e) {}
-          }
-          const savedOrders = localStorage.getItem(`extraOrders_${userData.id}`);
-          if (savedOrders) {
-            const localOrders = parseOrders(savedOrders);
-            const fixedOrders = localOrders.map(o => ({
-              ...o,
-              imageUrl: getImageUrl(o.imageUrl) || o.imageUrl
-            }));
-            setExtraOrders(fixedOrders);
-            // Save to DB for first time
-            saveOrdersToDB(fixedOrders);
-          }
+          loadFromLocalStorage();
         }
       } catch (e) {
-        console.log('❌ API failed, using localStorage');
-        const savedPrefs = localStorage.getItem(`milkPrefs_${userData.id}`);
-        if (savedPrefs) {
-          try { setPreferences(JSON.parse(savedPrefs)); } catch (e) {}
-        }
-        const savedOrders = localStorage.getItem(`extraOrders_${userData.id}`);
-        if (savedOrders) {
-          const orders = parseOrders(savedOrders);
-          setExtraOrders(orders.map(o => ({
-            ...o,
-            imageUrl: getImageUrl(o.imageUrl) || o.imageUrl
-          })));
-        }
+        console.log('❌ API failed:', e.message);
+        loadFromLocalStorage();
       }
     } catch (error) { console.error('Error:', error); }
     setLoading(false);
   };
 
+  // ✅ FIXED: Save preferences with ALL fields
   const savePreferences = async (newPrefs) => {
+    console.log('💾 Saving preferences:', newPrefs);
+    
+    // Update state immediately
     setPreferences(newPrefs); 
     setSaving(true);
+    
+    // Save to localStorage as backup
     localStorage.setItem(`milkPrefs_${userData.id}`, JSON.stringify(newPrefs));
+    
+    // ✅ Save to database with ALL fields
     try {
-      await fetch(`${API_URL}/customer-preferences/${userData.id}`, {
-        method: 'POST', headers: getAuthHeaders(),
-        body: JSON.stringify({ 
-          wantMilk: newPrefs.wantMilk,
-          quantity: newPrefs.quantity,
-          packSize: newPrefs.packSize,
-          skipDays: newPrefs.skipDays,
-          extraOrders: extraOrders
-        })
+      const payload = {
+        wantMilk: newPrefs.wantMilk,
+        quantity: newPrefs.quantity,
+        packSize: newPrefs.packSize,
+        skipDays: newPrefs.skipDays || [],
+        extraOrders: extraOrders || []
+      };
+      
+      console.log('📤 Sending to API:', payload);
+      
+      const res = await fetch(`${API_URL}/customer-preferences/${userData.id}`, {
+        method: 'POST', 
+        headers: getAuthHeaders(),
+        body: JSON.stringify(payload)
       });
-      showMessage('success', '✅ Preferences saved!');
+      
+      const data = await res.json();
+      console.log('✅ Save response:', data);
+      
+      if (data.success) {
+        showMessage('success', '✅ Preferences saved!');
+      }
     } catch (error) {
+      console.error('Save error:', error);
       showMessage('success', '✅ Saved locally!');
     }
     setSaving(false);
@@ -231,9 +245,7 @@ const CustomerDashboard = () => {
 
   const saveExtraOrders = async (newOrders) => {
     setExtraOrders(newOrders);
-    // Save to localStorage
     localStorage.setItem(`extraOrders_${userData.id}`, JSON.stringify(newOrders));
-    // Save to database
     await saveOrdersToDB(newOrders);
   };
 
@@ -257,7 +269,6 @@ const CustomerDashboard = () => {
   const handleLogout = () => { setShowLogoutConfirm(true); };
 
   const confirmLogout = () => {
-    // Save orders before logout
     saveOrdersToDB(extraOrders);
     sessionStorage.clear();
     window.location.href = '/login';
@@ -485,10 +496,7 @@ const CustomerDashboard = () => {
             )}
 
             <div className="cst-section-header">
-              <div>
-                <h3>🛍️ Our Products</h3>
-                <p>Tap to add to your cart</p>
-              </div>
+              <div><h3>🛍️ Our Products</h3><p>Tap to add to your cart</p></div>
             </div>
 
             <div className="cst-magic-grid">
