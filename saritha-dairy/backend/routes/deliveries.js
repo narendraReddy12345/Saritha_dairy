@@ -1,15 +1,20 @@
-// routes/deliveries.js
 const router = require('express').Router();
 const ctrl = require('../controllers/deliveryController');
 const { verifyToken, isAdmin } = require('../middleware/auth');
 
-// Anyone authenticated can record a delivery
+// Record a delivery
 router.post('/record', verifyToken, ctrl.record);
 
-// Anyone authenticated can view today's deliveries
+// Get today's deliveries for a boy
 router.get('/today/:boyId', verifyToken, ctrl.getToday);
 
-// ✅ Admin only - all deliveries
+// Admin only - all deliveries
 router.get('/all', verifyToken, isAdmin, ctrl.getAll);
+
+// ✅ Admin only - delete single delivery
+router.delete('/:id', verifyToken, isAdmin, ctrl.remove);
+
+// ✅ Admin only - bulk delete deliveries
+router.post('/bulk-delete', verifyToken, isAdmin, ctrl.bulkRemove);
 
 module.exports = router;

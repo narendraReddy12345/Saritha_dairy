@@ -1,21 +1,15 @@
-// controllers/deliveryController.js - COMPLETE FILE WITH STOCK REDUCTION
+// controllers/deliveryController.js - COMPLETE FILE WITH DELETE + STOCK REDUCTION
 const pool = require('../config/db');
 
 // ✅ Record a delivery AND reduce stock from store_stock
 exports.record = async (req, res) => {
   const { customer_id, delivery_boy_id, products, status, total_amount } = req.body;
   
-  console.log('========================================');
   console.log('📝 RECORDING DELIVERY');
   console.log('Customer ID:', customer_id);
-  console.log('Delivery Boy ID:', delivery_boy_id);
   console.log('Products:', JSON.stringify(products));
-  console.log('Total amount:', total_amount);
-  console.log('Status:', status);
-  console.log('========================================');
   
   if (!customer_id || !delivery_boy_id || !products || products.length === 0) {
-    console.log('❌ Missing required fields');
     return res.status(400).json({ 
       success: false, 
       error: 'Missing required fields: customer_id, delivery_boy_id, products' 
@@ -30,63 +24,26 @@ exports.record = async (req, res) => {
     for (const product of products) {
       const packSize = product.pack_size || '';
       
-      console.log(`📦 Processing: ${product.product_name} x${product.quantity} (pack: "${packSize}")`);
-      
-      // ✅ STEP 1: Insert into daily_delivery
+      // STEP 1: Insert into daily_delivery
       const deliveryResult = await client.query(
         `INSERT INTO daily_delivery 
          (customer_id, delivery_boy_id, delivery_date, product_name, pack_size, quantity, price, total_amount, status)
          VALUES ($1, $2, CURRENT_DATE, $3, $4, $5, $6, $7, $8)
-         RETURNING id, delivery_date`,
-        [
-          customer_id, delivery_boy_id, 
-          product.product_name, packSize,
-          product.quantity, product.price, 
-          total_amount, status || 'delivered'
-        ]
+         RETURNING id`,
+        [customer_id, delivery_boy_id, product.product_name, packSize,
+         product.quantity, product.price, total_amount, status || 'delivered']
       );
       console.log(`✅ Inserted delivery ID: ${deliveryResult.rows[0].id}`);
 
-      // ✅ STEP 2: Check available stock
-      const stockCheck = await client.query(
-        `SELECT product_name, pack_size_display, quantity 
-         FROM store_stock WHERE quantity > 0 
-         AND LOWER(product_name) LIKE LOWER($1)`,
-        [`%${product.product_name}%`]
-      );
-      
-      if (stockCheck.rows.length === 0) {
-        console.log(`⚠️ NO stock exists for "${product.product_name}"`);
-        console.log(`   Make sure products are packed before delivery!`);
-        continue;
-      }
-      
-      console.log(`📦 Available stock for "${product.product_name}":`);
-      stockCheck.rows.forEach(s => {
-        console.log(`   - "${s.product_name}" | "${s.pack_size_display}" | Qty: ${s.quantity}`);
-      });
-
-      // ✅ STEP 3: Try to reduce stock - Strategy 1: Exact match
+      // STEP 2: Reduce stock - try exact match first
       let stockResult = await client.query(
-        `UPDATE store_stock 
-         SET quantity = quantity - $1 
+        `UPDATE store_stock SET quantity = quantity - $1 
          WHERE product_name = $2 AND pack_size_display = $3 AND quantity >= $1
          RETURNING id, quantity, product_name, pack_size_display`,
         [product.quantity, product.product_name, packSize]
       );
       
-      // Strategy 2: Match without spaces ("500ml" matches "500 ml")
-      if (stockResult.rows.length === 0 && packSize) {
-        const packSizeNoSpace = packSize.replace(/\s/g, '');
-        stockResult = await client.query(
-          `UPDATE store_stock SET quantity = quantity - $1 
-           WHERE product_name = $2 AND REPLACE(pack_size_display, ' ', '') = $3 AND quantity >= $1
-           RETURNING id, quantity, product_name, pack_size_display`,
-          [product.quantity, product.product_name, packSizeNoSpace]
-        );
-      }
-      
-      // Strategy 3: Case-insensitive match
+      // Fallback: case-insensitive match
       if (stockResult.rows.length === 0 && packSize) {
         stockResult = await client.query(
           `UPDATE store_stock SET quantity = quantity - $1 
@@ -98,7 +55,7 @@ exports.record = async (req, res) => {
         );
       }
       
-      // Strategy 4: Any pack size for this product
+      // Fallback: any pack size for this product
       if (stockResult.rows.length === 0) {
         stockResult = await client.query(
           `UPDATE store_stock SET quantity = quantity - $1 
@@ -109,21 +66,14 @@ exports.record = async (req, res) => {
       }
       
       if (stockResult.rows.length > 0) {
-        const stock = stockResult.rows[0];
-        console.log(`📊 Stock reduced: "${stock.product_name}" (${stock.pack_size_display}) - ${stock.quantity} remaining`);
+        console.log(`📊 Stock reduced: ${stockResult.rows[0].quantity} remaining`);
       } else {
-        console.log(`⚠️ Could NOT reduce stock for "${product.product_name}" (${packSize})`);
-        console.log(`   Delivery recorded but stock unchanged. Check pack size match.`);
+        console.log(`⚠️ Could NOT reduce stock for "${product.product_name}"`);
       }
     }
     
-    // ✅ STEP 4: Clean up items with 0 quantity
-    const deleted = await client.query(
-      `DELETE FROM store_stock WHERE quantity <= 0 RETURNING id, product_name, pack_size_display`
-    );
-    if (deleted.rows.length > 0) {
-      console.log(`🗑️ Removed ${deleted.rows.length} out-of-stock items`);
-    }
+    // Clean up zero quantity items
+    await client.query('DELETE FROM store_stock WHERE quantity <= 0');
     
     await client.query('COMMIT');
     console.log('✅ All deliveries recorded successfully');
@@ -147,35 +97,14 @@ exports.getToday = async (req, res) => {
   
   try {
     const result = await pool.query(`
-      SELECT 
-        dd.*, 
-        c.name as customer_name, c.phone, c.area, c.apartment, c.flat_no
+      SELECT dd.*, c.name as customer_name, c.phone, c.area, c.apartment, c.flat_no
       FROM daily_delivery dd
       JOIN customers c ON dd.customer_id = c.id
-      WHERE dd.delivery_boy_id = $1 
-      AND DATE(dd.delivery_date) = CURRENT_DATE
+      WHERE dd.delivery_boy_id = $1 AND DATE(dd.delivery_date) = CURRENT_DATE
       ORDER BY dd.created_at DESC
     `, [boyId]);
     
     console.log(`✅ Found ${result.rows.length} today deliveries`);
-    
-    if (result.rows.length > 0) {
-      result.rows.forEach((d, i) => {
-        console.log(`  ${i+1}. ${d.customer_name} | ${d.product_name} x${d.quantity} | ${d.status}`);
-      });
-    } else {
-      const allRes = await pool.query(
-        `SELECT dd.id, dd.customer_id, dd.delivery_date, dd.status, c.name 
-         FROM daily_delivery dd LEFT JOIN customers c ON dd.customer_id = c.id 
-         WHERE dd.delivery_boy_id = $1 ORDER BY dd.id DESC LIMIT 10`,
-        [boyId]
-      );
-      console.log(`  Last 10 deliveries for boy ${boyId}:`);
-      allRes.rows.forEach(d => {
-        console.log(`    ID:${d.id} | ${d.name || d.customer_id} | Date:${d.delivery_date} | ${d.status}`);
-      });
-    }
-    
     res.json({ success: true, data: result.rows });
   } catch (error) {
     console.error('❌ Error in getToday:', error.message);
@@ -203,6 +132,90 @@ exports.getAll = async (req, res) => {
     res.json({ success: true, data: result.rows });
   } catch (error) {
     console.error('❌ Error in getAll:', error.message);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+// ✅ DELETE single delivery record
+exports.remove = async (req, res) => {
+  const { id } = req.params;
+  
+  console.log('🗑️ Deleting delivery ID:', id);
+  
+  try {
+    // Get delivery details before deleting (to restore stock if needed)
+    const delivery = await pool.query(
+      'SELECT * FROM daily_delivery WHERE id = $1',
+      [id]
+    );
+    
+    if (delivery.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Delivery record not found' });
+    }
+    
+    const d = delivery.rows[0];
+    
+    // Optional: Restore stock back to store_stock
+    if (d.product_name && d.quantity) {
+      await pool.query(
+        `UPDATE store_stock SET quantity = quantity + $1 
+         WHERE LOWER(product_name) LIKE LOWER($2)`,
+        [d.quantity, `%${d.product_name}%`]
+      );
+      console.log(`📦 Stock restored: ${d.product_name} +${d.quantity}`);
+    }
+    
+    // Delete the delivery record
+    await pool.query('DELETE FROM daily_delivery WHERE id = $1', [id]);
+    
+    console.log('✅ Delivery deleted:', d.customer_name || 'Unknown');
+    res.json({ success: true, message: 'Delivery record deleted!' });
+  } catch (error) {
+    console.error('❌ Error deleting delivery:', error.message);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+// ✅ BULK DELETE delivery records
+exports.bulkRemove = async (req, res) => {
+  const { ids } = req.body;
+  
+  if (!ids || !Array.isArray(ids) || ids.length === 0) {
+    return res.status(400).json({ success: false, error: 'No IDs provided' });
+  }
+  
+  console.log(`🗑️ Bulk deleting ${ids.length} deliveries`);
+  
+  try {
+    // Restore stock for all deleted deliveries
+    const deliveries = await pool.query(
+      'SELECT product_name, quantity FROM daily_delivery WHERE id = ANY($1)',
+      [ids]
+    );
+    
+    for (const d of deliveries.rows) {
+      if (d.product_name && d.quantity) {
+        await pool.query(
+          `UPDATE store_stock SET quantity = quantity + $1 
+           WHERE LOWER(product_name) LIKE LOWER($2)`,
+          [d.quantity, `%${d.product_name}%`]
+        );
+      }
+    }
+    
+    const result = await pool.query(
+      'DELETE FROM daily_delivery WHERE id = ANY($1) RETURNING id',
+      [ids]
+    );
+    
+    console.log(`✅ Deleted ${result.rows.length} records`);
+    res.json({ 
+      success: true, 
+      deleted: result.rows.length,
+      message: `${result.rows.length} records deleted!` 
+    });
+  } catch (error) {
+    console.error('❌ Error in bulk delete:', error.message);
     res.status(500).json({ success: false, error: error.message });
   }
 };
