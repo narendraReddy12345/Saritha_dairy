@@ -71,14 +71,61 @@ exports.update = async (req, res) => {
   }
 };
 
+// ✅ FIXED: Delete with all related records
 exports.remove = async (req, res) => {
+  const { id } = req.params;
+  const client = await pool.connect();
+  
   try {
-    await pool.query('DELETE FROM customer_delivery_assignments WHERE delivery_boy_id = $1', [req.params.id]);
-    await pool.query('DELETE FROM delivery_boys WHERE id = $1', [req.params.id]);
-    res.json({ success: true, message: 'Deleted' });
+    await client.query('BEGIN');
+    
+    console.log(`🗑️ Starting deletion of delivery boy ID: ${id}`);
+    
+    // 1. Delete daily delivery records
+    const dailyDelResult = await client.query(
+      'DELETE FROM daily_delivery WHERE delivery_boy_id = $1 RETURNING id',
+      [id]
+    );
+    console.log(`   ✅ Deleted ${dailyDelResult.rows.length} daily delivery records`);
+    
+    // 2. Delete customer assignments
+    const assignResult = await client.query(
+      'DELETE FROM customer_delivery_assignments WHERE delivery_boy_id = $1 RETURNING id',
+      [id]
+    );
+    console.log(`   ✅ Deleted ${assignResult.rows.length} customer assignments`);
+    
+    // 3. Delete the delivery boy
+    const boyResult = await client.query(
+      'DELETE FROM delivery_boys WHERE id = $1 RETURNING id, name',
+      [id]
+    );
+    
+    if (boyResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ success: false, error: 'Delivery boy not found' });
+    }
+    
+    console.log(`   ✅ Deleted delivery boy: ${boyResult.rows[0].name}`);
+    
+    await client.query('COMMIT');
+    
+    res.json({ 
+      success: true, 
+      message: `"${boyResult.rows[0].name}" deleted successfully`,
+      deleted: {
+        name: boyResult.rows[0].name,
+        dailyDeliveries: dailyDelResult.rows.length,
+        assignments: assignResult.rows.length
+      }
+    });
+    
   } catch (error) {
-    console.error('Error deleting:', error);
+    await client.query('ROLLBACK');
+    console.error('❌ Error deleting delivery boy:', error.message);
     res.status(500).json({ success: false, error: error.message });
+  } finally {
+    client.release();
   }
 };
 
@@ -127,7 +174,6 @@ exports.assignCustomers = async (req, res) => {
   }
 };
 
-// ✅ FIXED: Now includes customer products
 exports.getAssignedCustomers = async (req, res) => {
   const { id } = req.params;
   
