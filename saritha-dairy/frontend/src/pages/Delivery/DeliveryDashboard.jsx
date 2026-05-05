@@ -15,6 +15,8 @@ const DeliveryDashboard = () => {
   const [deliveringId, setDeliveringId] = useState(null);
   const [showProfile, setShowProfile] = useState(false);
   const [expandedApt, setExpandedApt] = useState(null);
+  const [extraOrdersCount, setExtraOrdersCount] = useState(0);
+  const [showOrdersBanner, setShowOrdersBanner] = useState(true);
 
   const getUserData = () => {
     try {
@@ -62,7 +64,6 @@ const DeliveryDashboard = () => {
       const todayData = await todayRes.json();
       const todayDeliveries = todayData.success ? todayData.data : [];
 
-      // ✅ Load customer preferences
       let preferencesMap = {};
       try {
         const prefsRes = await fetch(`${API_URL}/customer-preferences/all/list`, {
@@ -81,8 +82,8 @@ const DeliveryDashboard = () => {
         }
       } catch (e) { console.log('Preferences not available'); }
 
-      // ✅ Load customer extra orders
       let extraOrdersMap = {};
+      let totalExtraOrders = 0;
       try {
         const ordersRes = await fetch(`${API_URL}/customer-preferences/extra-orders/all`, {
           headers: getAuthHeaders()
@@ -91,7 +92,9 @@ const DeliveryDashboard = () => {
         if (ordersData.success && ordersData.data) {
           ordersData.data.forEach(o => {
             extraOrdersMap[o.customerId] = o.orders;
+            totalExtraOrders += o.orders.length;
           });
+          setExtraOrdersCount(totalExtraOrders);
         }
       } catch (e) { console.log('Extra orders not available'); }
 
@@ -105,7 +108,7 @@ const DeliveryDashboard = () => {
             deliveryData: deliveryInfo || null, 
             products: c.products || [],
             preferences: preferencesMap[c.id] || { wantMilk: true, quantity: 2, packSize: '500ml', skipDays: [] },
-            extraOrders: extraOrdersMap[c.id] || [] // ✅ Extra orders
+            extraOrders: extraOrdersMap[c.id] || []
           };
         });
 
@@ -275,10 +278,25 @@ const DeliveryDashboard = () => {
 
   return (
     <div className={`dd-pro-app ${greeting.timeOfDay}`}>
+      {/* Toast */}
       {message && (
         <div className={`dd-pro-toast ${message.type}`}>
           <span>{message.text}</span>
           <button onClick={() => setMessage(null)}>×</button>
+        </div>
+      )}
+
+      {/* ✅ MORNING BANNER */}
+      {showOrdersBanner && extraOrdersCount > 0 && (
+        <div className="dd-pro-morning-banner">
+          <div className="dd-pro-banner-content">
+            <span className="dd-pro-banner-icon">🌅</span>
+            <div className="dd-pro-banner-text">
+              <strong>Good Morning! {extraOrdersCount} extra product orders today</strong>
+              <p>Customers ordered additional items. Check below for details.</p>
+            </div>
+            <button onClick={() => setShowOrdersBanner(false)} className="dd-pro-banner-close">×</button>
+          </div>
         </div>
       )}
 
@@ -297,11 +315,13 @@ const DeliveryDashboard = () => {
         <div className="dd-pro-header-right">
           <button className="dd-pro-notif-btn">
             🔔
-            {todayStats.pending > 0 && <span className="dd-pro-notif-badge">{todayStats.pending}</span>}
+            {(todayStats.pending + extraOrdersCount) > 0 && 
+              <span className="dd-pro-notif-badge">{todayStats.pending + extraOrdersCount}</span>}
           </button>
         </div>
       </div>
 
+      {/* Profile Popup */}
       {showProfile && (
         <div className="dd-pro-profile-card">
           <div className="dd-pro-profile-top">
@@ -318,6 +338,7 @@ const DeliveryDashboard = () => {
         </div>
       )}
 
+      {/* Stats Card */}
       <div className="dd-pro-main-card">
         <div className="dd-pro-main-card-header">
           <div><h3>Today's Route</h3><p>{new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'short' })}</p></div>
@@ -342,22 +363,26 @@ const DeliveryDashboard = () => {
         </div>
       </div>
 
+      {/* Quick Actions */}
       <div className="dd-pro-quick-actions">
         <button className="dd-pro-quick-btn" onClick={() => setActiveTab('pending')}><span>🚀</span> Start Delivery</button>
         <button className="dd-pro-quick-btn" onClick={() => window.open('https://maps.google.com', '_blank')}><span>🗺️</span> View Route</button>
       </div>
 
+      {/* Search */}
       <div className="dd-pro-search">
         <span>🔍</span>
         <input type="text" placeholder="Search customers, apartments..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
         {searchTerm && <button onClick={() => setSearchTerm('')}>×</button>}
       </div>
 
+      {/* Tabs */}
       <div className="dd-pro-tabs">
         <button className={`dd-pro-tab ${activeTab === 'pending' ? 'active' : ''}`} onClick={() => setActiveTab('pending')}>⏳ Pending ({pendingCustomers.length})</button>
         <button className={`dd-pro-tab ${activeTab === 'completed' ? 'active' : ''}`} onClick={() => setActiveTab('completed')}>✅ Done ({completedCustomers.length})</button>
       </div>
 
+      {/* Customer List */}
       <div className="dd-pro-customer-list">
         {apartmentGroups.length === 0 ? (
           <div className="dd-pro-empty">

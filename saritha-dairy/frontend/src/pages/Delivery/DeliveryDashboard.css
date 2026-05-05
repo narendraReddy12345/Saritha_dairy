@@ -803,3 +803,189 @@
   background: #fee2e2;
   color: #dc2626;
 }
+/* ==================== MORNING BANNER ==================== */
+.dd-pro-morning-banner {
+  background: linear-gradient(135deg, #fef3c7, #fde68a);
+  margin: 8px 14px;
+  border-radius: 16px;
+  padding: 14px;
+  border: 1px solid #fcd34d;
+  animation: bannerSlideDown 0.5s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.dd-pro-morning-banner::before {
+  content: '';
+  position: absolute;
+  top: -20px;
+  right: -20px;
+  width: 80px;
+  height: 80px;
+  background: rgba(251, 191, 36, 0.2);
+  border-radius: 50%;
+}
+
+@keyframes bannerSlideDown {
+  from { opacity: 0; transform: translateY(-20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.dd-pro-banner-content {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  position: relative;
+  z-index: 1;
+}
+
+.dd-pro-banner-icon {
+  font-size: 28px;
+  animation: floatIcon 2s ease-in-out infinite;
+}
+
+@keyframes floatIcon {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-5px); }
+}
+
+.dd-pro-banner-text {
+  flex: 1;
+}
+
+.dd-pro-banner-text strong {
+  display: block;
+  font-size: 13px;
+  color: #92400e;
+  margin-bottom: 2px;
+}
+
+.dd-pro-banner-text p {
+  font-size: 11px;
+  color: #a16207;
+  margin: 0;
+}
+
+.dd-pro-banner-close {
+  background: rgba(0,0,0,0.1);
+  border: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 12px;
+  color: #92400e;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ==================== EXTRA ORDERS ==================== */
+.dd-pro-extra-orders {
+  margin-top: 6px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+
+.dd-pro-extra-label {
+  font-size: 9px;
+  color: #f59e0b;
+  font-weight: 700;
+  background: #fffbeb;
+  padding: 2px 6px;
+  border-radius: 6px;
+}
+
+.dd-pro-extra-tag {
+  background: #fff7ed;
+  color: #ea580c;
+  padding: 3px 8px;
+  border-radius: 8px;
+  font-size: 9px;
+  font-weight: 600;
+  border: 1px solid #fed7aa;
+  white-space: nowrap;
+}
+
+/* ==================== BLOCKED DELIVERY ==================== */
+.dd-pro-list-warning {
+  font-size: 12px;
+  font-weight: 700;
+  color: #dc2626;
+  background: #fef2f2;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px dashed #fca5a5;
+  display: inline-block;
+}
+
+.dd-pro-list-blocked-btn {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: none;
+  background: #fee2e2;
+  color: #dc2626;
+  font-size: 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid #fca5a5;
+}
+
+.dd-pro-list-blocked-btn:hover {
+  background: #fecaca;
+}
+
+.dd-pro-list-row.paused {
+  background: #fef2f2;
+  border-left: 3px solid #ef4444;
+  opacity: 0.85;
+}
+
+.dd-pro-list-row.skip {
+  background: #fffbeb;
+  border-left: 3px solid #f59e0b;
+}
+
+.dd-pro-pause-badge {
+  display: inline-block;
+  margin-left: 6px;
+  font-size: 12px;
+}
+
+.dd-pro-skip-badge {
+  display: inline-block;
+  margin-left: 4px;
+  font-size: 10px;
+  background: #fef3c7;
+  color: #d97706;
+  padding: 2px 6px;
+  border-radius: 10px;
+  font-weight: 700;
+}
+
+.dd-pro-milk-pref {
+  font-size: 11px;
+  color: #1a472a;
+  font-weight: 600;
+  margin-top: 2px;
+  background: #f0fdf4;
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 8px;
+}
+
+.dd-pro-list-status.paused {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+.dd-pro-list-status.skip {
+  background: #fef3c7;
+  color: #d97706;
+}
