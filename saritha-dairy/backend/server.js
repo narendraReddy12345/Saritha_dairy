@@ -25,6 +25,9 @@ app.use('/api', require('./routes/stock'));
 app.use('/api', require('./routes/sales'));
 // In server.js, add:
 app.use('/api/credit', require('./routes/credit'));
+app.use('/api/customer-preferences', require('./routes/customerPreferences'));
+const { createTable } = require('./controllers/customerPreferences');
+createTable();
 
 // Start Server
 const PORT = process.env.PORT || 5000;
