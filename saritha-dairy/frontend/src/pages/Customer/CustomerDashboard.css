@@ -972,3 +972,344 @@ textarea:focus { outline: none; border-color: #22c55e; }
 @media (min-width: 400px) {
   .cst-magic-card-img { height: 150px; }
 }
+/* ==================== INNOVATIVE BILL TAB ==================== */
+.cst-bill-innovative {
+  background: white;
+  border-radius: 24px;
+  overflow: hidden;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+}
+
+/* Glass Header with Circle */
+.cst-bill-glass-header {
+  background: linear-gradient(135deg, #1a472a, #2d6a4f);
+  padding: 30px 20px 40px;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  justify-content: center;
+}
+
+.cst-bill-wave {
+  position: absolute;
+  bottom: -2px;
+  left: 0;
+  right: 0;
+  height: 40px;
+  background: white;
+  border-radius: 50% 50% 0 0;
+}
+
+.cst-bill-amount-circle {
+  position: relative;
+  width: 140px;
+  height: 140px;
+  z-index: 1;
+}
+
+.cst-bill-amount-circle svg {
+  width: 140px;
+  height: 140px;
+}
+
+.cst-bill-amount-inner {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+}
+
+.cst-bill-total-label {
+  display: block;
+  font-size: 10px;
+  color: rgba(255,255,255,0.8);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 2px;
+}
+
+.cst-bill-total-amount {
+  font-size: 24px;
+  font-weight: 900;
+  color: white;
+}
+
+/* Detail Cards */
+.cst-bill-details {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.cst-bill-detail-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 16px;
+  transition: all 0.2s;
+}
+
+.cst-bill-detail-card.milk {
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+}
+
+.cst-bill-detail-card.extra {
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+}
+
+.cst-bill-detail-card.skip {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+}
+
+.cst-bill-card-icon {
+  font-size: 32px;
+  width: 50px;
+  height: 50px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.cst-bill-detail-card.milk .cst-bill-card-icon { background: #dcfce7; }
+.cst-bill-detail-card.extra .cst-bill-card-icon { background: #fef3c7; }
+.cst-bill-detail-card.skip .cst-bill-card-icon { background: #fee2e2; }
+
+.cst-bill-card-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.cst-bill-card-info h4 {
+  margin: 0 0 2px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #1a1a1a;
+}
+
+.cst-bill-card-info p {
+  margin: 0;
+  font-size: 11px;
+  color: #888;
+}
+
+.cst-bill-card-status {
+  font-size: 10px;
+  font-weight: 600;
+  display: inline-block;
+  margin-top: 4px;
+}
+
+.cst-bill-card-amount {
+  font-size: 18px;
+  font-weight: 800;
+  color: #1a472a;
+  flex-shrink: 0;
+}
+
+/* Mini Items */
+.cst-bill-mini-items {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.cst-bill-mini-tag {
+  background: rgba(0,0,0,0.06);
+  padding: 2px 8px;
+  border-radius: 8px;
+  font-size: 10px;
+  font-weight: 600;
+  color: #555;
+}
+
+.cst-bill-mini-more {
+  font-size: 10px;
+  color: #f59e0b;
+  font-weight: 700;
+}
+
+.cst-bill-skip-chip {
+  background: #fee2e2;
+  color: #ef4444;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+/* Total Bar */
+.cst-bill-total-bar {
+  padding: 16px;
+  background: #f9fafb;
+  margin: 0 16px 16px;
+  border-radius: 16px;
+}
+
+.cst-bill-total-bar-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 0;
+  font-size: 13px;
+  color: #666;
+}
+
+.cst-bill-total-bar-divider {
+  height: 1px;
+  background: #e5e7eb;
+  margin: 8px 0;
+}
+
+.cst-bill-total-bar-row.grand {
+  font-size: 16px;
+}
+
+.cst-bill-total-bar-row.grand span {
+  font-weight: 700;
+  color: #1a472a;
+}
+
+.cst-bill-total-bar-row.grand strong {
+  font-size: 20px;
+  color: #1a472a;
+}
+
+.cst-bill-thankyou {
+  text-align: center;
+  padding: 0 0 20px;
+  color: #aaa;
+  font-size: 11px;
+}
+
+.cst-bill-thankyou span {
+  font-size: 24px;
+  display: block;
+  margin-bottom: 4px;
+}
+/* ==================== CALENDAR FOR SKIP DAYS ==================== */
+.cst-calendar {
+  background: #f9fafb;
+  border-radius: 16px;
+  padding: 14px;
+  margin-top: 8px;
+}
+
+.cst-calendar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.cst-calendar-nav {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: none;
+  background: white;
+  cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  transition: all 0.2s;
+}
+.cst-calendar-nav:active { transform: scale(0.9); background: #e5e7eb; }
+
+.cst-calendar-month {
+  font-size: 14px;
+  font-weight: 700;
+  color: #1a1a1a;
+}
+
+.cst-calendar-day-headers {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+  margin-bottom: 4px;
+}
+
+.cst-calendar-day-header {
+  text-align: center;
+  font-size: 10px;
+  font-weight: 700;
+  color: #94a3b8;
+  padding: 4px 0;
+  text-transform: uppercase;
+}
+
+.cst-calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+
+.cst-calendar-day {
+  aspect-ratio: 1;
+  border: none;
+  border-radius: 10px;
+  background: white;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 600;
+  color: #333;
+  transition: all 0.2s;
+  position: relative;
+  font-family: inherit;
+}
+
+.cst-calendar-day.empty {
+  background: transparent;
+  cursor: default;
+}
+
+.cst-calendar-day:active { transform: scale(0.9); }
+
+.cst-calendar-day.today {
+  border: 2px solid #22c55e;
+  color: #16a34a;
+}
+
+.cst-calendar-day.skipped {
+  background: #fef2f2;
+  color: #ef4444;
+}
+
+.cst-calendar-day.skipped.today {
+  border-color: #ef4444;
+}
+
+.cst-calendar-skip-dot {
+  font-size: 8px;
+  position: absolute;
+  bottom: 2px;
+}
+
+.cst-calendar-day-num {
+  position: relative;
+  z-index: 1;
+}
+/* Past dates - disabled */
+.cst-calendar-day.past {
+  opacity: 0.4;
+  cursor: not-allowed;
+  background: #f5f5f5;
+}
+
+.cst-calendar-day:disabled {
+  cursor: not-allowed;
+  pointer-events: none;
+}

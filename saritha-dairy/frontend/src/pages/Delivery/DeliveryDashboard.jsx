@@ -6,7 +6,7 @@ const API_URL = 'https://saritha-dairy-api.onrender.com/api';
 
 const DeliveryDashboard = () => {
   const [customers, setCustomers] = useState([]);
-  const [activeTab, setActiveTab] = useState('pending');
+  const [activeTab, setActiveTab] = useState('home');
   const [searchTerm, setSearchTerm] = useState('');
   const [message, setMessage] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -16,550 +16,260 @@ const DeliveryDashboard = () => {
   const [showProfile, setShowProfile] = useState(false);
   const [expandedApt, setExpandedApt] = useState(null);
   const [extraOrdersCount, setExtraOrdersCount] = useState(0);
-  const [showOrdersBanner, setShowOrdersBanner] = useState(true);
+  const [showBanner, setShowBanner] = useState(true);
+  const [pulseAnim, setPulseAnim] = useState(false);
 
-  const getUserData = () => {
-    try {
-      const data = sessionStorage.getItem('userData');
-      return data ? JSON.parse(data) : null;
-    } catch { return null; }
-  };
-
+  const getUserData = () => { try { return JSON.parse(sessionStorage.getItem('userData')); } catch { return null; } };
   const getToken = () => sessionStorage.getItem('authToken');
-  const getAuthHeaders = () => ({
-    'Content-Type': 'application/json',
-    'Authorization': `Bearer ${getToken()}`
-  });
-
+  const getAuthHeaders = () => ({ 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` });
   const userData = getUserData();
 
   useEffect(() => {
-    if (!userData?.id) { 
-      window.location.href = '/login';
-      return; 
-    }
+    if (!userData?.id) { window.location.href = '/login'; return; }
     loadAllData();
-    const timer = setInterval(() => setCurrentTime(new Date()), 60000);
-    return () => clearInterval(timer);
+    const t1 = setInterval(() => setCurrentTime(new Date()), 60000);
+    const t2 = setInterval(() => setPulseAnim(p => !p), 3000);
+    return () => { clearInterval(t1); clearInterval(t2); };
   }, []);
 
   const loadAllData = async () => {
     setLoading(true);
-    const boyId = userData?.id;
-
     try {
-      const custRes = await fetch(`${API_URL}/delivery-boys/${boyId}/customers`, {
-        headers: getAuthHeaders()
-      });
+      const [custRes, todayRes] = await Promise.all([
+        fetch(`${API_URL}/delivery-boys/${userData.id}/customers`, { headers: getAuthHeaders() }),
+        fetch(`${API_URL}/delivery/today/${userData.id}`, { headers: getAuthHeaders() })
+      ]);
+      if (custRes.status === 401) { sessionStorage.clear(); window.location.href = '/login'; return; }
       
-      if (custRes.status === 401) { 
-        sessionStorage.clear(); 
-        window.location.href = '/login';
-        return; 
-      }
-
       const custData = await custRes.json();
-      
-      const todayRes = await fetch(`${API_URL}/delivery/today/${boyId}`, { headers: getAuthHeaders() });
       const todayData = await todayRes.json();
       const todayDeliveries = todayData.success ? todayData.data : [];
 
-      let preferencesMap = {};
+      let prefsMap = {}, ordersMap = {}, totalExtra = 0;
       try {
-        const prefsRes = await fetch(`${API_URL}/customer-preferences/all/list`, {
-          headers: getAuthHeaders()
-        });
+        const [prefsRes, ordersRes] = await Promise.all([
+          fetch(`${API_URL}/customer-preferences/all/list`, { headers: getAuthHeaders() }),
+          fetch(`${API_URL}/customer-preferences/extra-orders/all`, { headers: getAuthHeaders() })
+        ]);
         const prefsData = await prefsRes.json();
-        if (prefsData.success && prefsData.data) {
-          prefsData.data.forEach(p => {
-            preferencesMap[p.customer_id] = {
-              wantMilk: p.want_milk,
-              quantity: p.quantity || 2,
-              packSize: p.pack_size || '500ml',
-              skipDays: Array.isArray(p.skip_days) ? p.skip_days : 
-                (typeof p.skip_days === 'string' ? JSON.parse(p.skip_days) : []),
-              extraOrders: Array.isArray(p.extra_orders) ? p.extra_orders :
-                (typeof p.extra_orders === 'string' ? JSON.parse(p.extra_orders) : [])
-            };
-          });
-        }
-      } catch (e) { console.log('Preferences not available'); }
-
-      let extraOrdersMap = {};
-      let totalExtraOrders = 0;
-      try {
-        const ordersRes = await fetch(`${API_URL}/customer-preferences/extra-orders/all`, {
-          headers: getAuthHeaders()
-        });
         const ordersData = await ordersRes.json();
-        if (ordersData.success && ordersData.data) {
-          ordersData.data.forEach(o => {
-            // Only count orders that are NOT delivered
-            const pendingOrders = o.orders.filter(order => order.status !== 'delivered');
-            extraOrdersMap[o.customerId] = o.orders;
-            totalExtraOrders += pendingOrders.length;
-          });
-          setExtraOrdersCount(totalExtraOrders);
-        }
-      } catch (e) { console.log('Extra orders not available'); }
+        
+        if (prefsData.success) prefsData.data.forEach(p => { prefsMap[p.customer_id] = { wantMilk: p.want_milk, quantity: p.quantity||2, packSize: p.pack_size||'500ml', skipDays: typeof p.skip_days==='string'?JSON.parse(p.skip_days):(p.skip_days||[]) }; });
+        if (ordersData.success) ordersData.data.forEach(o => { ordersMap[o.customerId] = o.orders; totalExtra += o.orders.filter(or=>or.status!=='delivered').length; });
+        setExtraOrdersCount(totalExtra);
+      } catch(e) {}
 
-      if (custData.success && custData.data) {
-        const enriched = custData.data.map(c => {
-          const deliveredToday = todayDeliveries.some(d => d.customer_id == c.id);
-          const deliveryInfo = todayDeliveries.find(d => d.customer_id == c.id);
-          return { 
-            ...c, 
-            delivered: deliveredToday, 
-            deliveryData: deliveryInfo || null, 
-            products: c.products || [],
-            preferences: preferencesMap[c.id] || { wantMilk: true, quantity: 2, packSize: '500ml', skipDays: [] },
-            extraOrders: extraOrdersMap[c.id] || []
-          };
-        });
-
-        enriched.sort((a, b) => {
-          if (a.delivered === b.delivered) return (a.apartment || '').localeCompare(b.apartment || '');
-          return a.delivered ? 1 : -1;
-        });
-
+      if (custData.success) {
+        const enriched = custData.data.map(c => ({
+          ...c, delivered: todayDeliveries.some(d=>d.customer_id==c.id),
+          deliveryData: todayDeliveries.find(d=>d.customer_id==c.id)||null,
+          products: c.products||[], preferences: prefsMap[c.id]||{wantMilk:true,quantity:2,packSize:'500ml',skipDays:[]},
+          extraOrders: ordersMap[c.id]||[]
+        }));
+        enriched.sort((a,b)=>a.delivered===b.delivered?(a.apartment||'').localeCompare(b.apartment||''):a.delivered?1:-1);
         setCustomers(enriched);
-        const done = enriched.filter(c => c.delivered);
-        const pending = enriched.filter(c => !c.delivered);
-        setTodayStats({
-          deliveries: done.length,
-          collected: done.reduce((s, c) => s + (parseFloat(c.deliveryData?.total_amount) || 0), 0),
-          pending: pending.length
-        });
+        const done = enriched.filter(c=>c.delivered);
+        setTodayStats({ deliveries: done.length, collected: done.reduce((s,c)=>s+(parseFloat(c.deliveryData?.total_amount)||0),0), pending: enriched.filter(c=>!c.delivered).length });
       }
-    } catch (error) {
-      showMessage('error', 'Failed to load data');
-    }
+    } catch(e) { showMessage('error','Failed to load'); }
     setLoading(false);
   };
 
-  // ✅ FIXED: markDelivered - Marks orders as delivered instead of deleting
   const markDelivered = async (customerId) => {
-    const customer = customers.find(c => c.id == customerId);
-    if (!customer || deliveringId) return;
-
-    if (isPaused(customer)) {
-      showMessage('error', `⚠️ ${customer.name} has PAUSED milk delivery! Do NOT deliver.`);
-      return;
-    }
-    if (isSkipDay(customer)) {
-      showMessage('error', `⚠️ Today is SKIP DAY for ${customer.name}! Do NOT deliver.`);
-      return;
-    }
-
+    const customer = customers.find(c=>c.id==customerId);
+    if (!customer||deliveringId) return;
+    if (isPaused(customer)) { showMessage('error',`⚠️ Paused!`); return; }
+    if (isSkipDay(customer)) { showMessage('error',`⚠️ Skip day!`); return; }
     setDeliveringId(customerId);
-    const products = customer.products || [];
-    const totalAmount = products.reduce((s, p) => s + ((p.price || 0) * (p.quantity || p.quantity_per_day || 1)), 0);
-
+    const prods = customer.products||[];
+    const total = prods.reduce((s,p)=>s+((p.price||0)*(p.quantity||p.quantity_per_day||1)),0);
     try {
-      const response = await fetch(`${API_URL}/delivery/record`, {
-        method: 'POST',
-        headers: getAuthHeaders(),
-        body: JSON.stringify({
-          customer_id: parseInt(customerId),
-          delivery_boy_id: parseInt(userData?.id),
-          delivery_date: new Date().toISOString().split('T')[0],
-          products: products.map(p => ({
-            product_name: p.product_name, pack_size: p.pack_size,
-            quantity: parseInt(p.quantity || p.quantity_per_day || 1), price: parseFloat(p.price || 0)
-          })),
-          status: 'delivered', total_amount: totalAmount
-        })
-      });
-
-      const data = await response.json();
+      const res = await fetch(`${API_URL}/delivery/record`, { method:'POST', headers:getAuthHeaders(),
+        body:JSON.stringify({ customer_id:parseInt(customerId), delivery_boy_id:parseInt(userData.id), delivery_date:new Date().toISOString().split('T')[0], products:prods.map(p=>({product_name:p.product_name,pack_size:p.pack_size,quantity:parseInt(p.quantity||p.quantity_per_day||1),price:parseFloat(p.price||0)})), status:'delivered', total_amount:total }) });
+      const data = await res.json();
       if (data.success) {
-        // ✅ FIXED: Mark extra orders as delivered instead of deleting
-        if (customer.extraOrders && customer.extraOrders.length > 0) {
-          try {
-            const today = new Date().toISOString().split('T')[0];
-            const updatedOrders = customer.extraOrders.map(order => {
-              if (order.date === today) {
-                return { ...order, status: 'delivered' }; // ✅ Mark as delivered
-              }
-              return order;
-            });
-            
-            await fetch(`${API_URL}/customer-preferences/${customerId}`, {
-              method: 'POST',
-              headers: getAuthHeaders(),
-              body: JSON.stringify({
-                wantMilk: customer.preferences?.wantMilk ?? true,
-                quantity: customer.preferences?.quantity ?? 2,
-                packSize: customer.preferences?.packSize ?? '500ml',
-                skipDays: customer.preferences?.skipDays || [],
-                extraOrders: updatedOrders // ✅ Save with delivered status
-              })
-            });
-            console.log('✅ Orders marked as delivered for:', customer.name);
-          } catch (e) {
-            console.log('Failed to update orders:', e);
-          }
-        }
-
-        setCustomers(prev => {
+        if (customer.extraOrders?.length) {
           const today = new Date().toISOString().split('T')[0];
-          const updated = prev.map(c => c.id == customerId 
-            ? { 
-                ...c, 
-                delivered: true, 
-                deliveryData: { total_amount: totalAmount }, 
-                // ✅ Mark extra orders as delivered in local state
-                extraOrders: (c.extraOrders || []).map(order => {
-                  if (order.date === today) {
-                    return { ...order, status: 'delivered' };
-                  }
-                  return order;
-                })
-              } 
-            : c);
-          const done = updated.filter(c => c.delivered);
-          // Count undelivered orders
-          const remainingOrders = updated.reduce((s, c) => 
-            s + (c.extraOrders || []).filter(o => o.status !== 'delivered').length, 0
-          );
-          setExtraOrdersCount(remainingOrders);
-          setTodayStats({ 
-            deliveries: done.length, 
-            collected: done.reduce((s, c) => s + (parseFloat(c.deliveryData?.total_amount) || 0), 0), 
-            pending: updated.filter(c => !c.delivered).length 
-          });
-          return updated;
+          await fetch(`${API_URL}/customer-preferences/${customerId}`, { method:'POST', headers:getAuthHeaders(),
+            body:JSON.stringify({ wantMilk:customer.preferences?.wantMilk??true, quantity:customer.preferences?.quantity??2, packSize:customer.preferences?.packSize??'500ml', skipDays:customer.preferences?.skipDays||[], extraOrders:customer.extraOrders.map(o=>o.date===today?{...o,status:'delivered'}:o) }) }).catch(()=>{});
+        }
+        setCustomers(prev=>{
+          const today = new Date().toISOString().split('T')[0];
+          const u = prev.map(c=>c.id==customerId?{...c,delivered:true,deliveryData:{total_amount:total},extraOrders:(c.extraOrders||[]).map(o=>o.date===today?{...o,status:'delivered'}:o)}:c);
+          const done = u.filter(c=>c.delivered);
+          setTodayStats({ deliveries:done.length, collected:done.reduce((s,c)=>s+(parseFloat(c.deliveryData?.total_amount)||0),0), pending:u.filter(c=>!c.delivered).length });
+          setExtraOrdersCount(u.reduce((s,c)=>s+(c.extraOrders||[]).filter(o=>o.status!=='delivered').length,0));
+          return u;
         });
-        showMessage('success', `✅ Delivered to ${customer.name}`);
-      } else {
-        showMessage('error', data.error || 'Failed');
-      }
-    } catch (error) {
-      showMessage('error', 'Connection failed');
-    }
+        showMessage('success',`✅ ${customer.name}`);
+      } else showMessage('error',data.error);
+    } catch(e) { showMessage('error','Failed'); }
     setDeliveringId(null);
   };
 
-  const undoDelivery = (customerId) => {
-    setCustomers(prev => {
-      const updated = prev.map(c => c.id == customerId ? { ...c, delivered: false, deliveryData: null } : c);
-      const done = updated.filter(c => c.delivered);
-      setTodayStats({ deliveries: done.length, collected: done.reduce((s, c) => s + (parseFloat(c.deliveryData?.total_amount) || 0), 0), pending: updated.filter(c => !c.delivered).length });
-      return updated;
-    });
-    showMessage('success', '↩️ Undone');
+  const undoDelivery = (cid) => {
+    setCustomers(prev=>{ const u=prev.map(c=>c.id==cid?{...c,delivered:false,deliveryData:null}:c); setTodayStats({ deliveries:u.filter(c=>c.delivered).length, collected:u.filter(c=>c.delivered).reduce((s,c)=>s+(parseFloat(c.deliveryData?.total_amount)||0),0), pending:u.filter(c=>!c.delivered).length }); return u; });
+    showMessage('success','↩️ Undone');
   };
 
-  const showMessage = (type, text) => {
-    setMessage({ type, text });
-    setTimeout(() => setMessage(null), 3000);
-  };
+  const showMessage = (type,text) => { setMessage({type,text}); setTimeout(()=>setMessage(null),2500); };
+  const handleLogout = () => { sessionStorage.clear(); window.location.href='/login'; };
 
-  const handleLogout = () => {
-    sessionStorage.clear();
-    window.location.href = '/login';
-  };
+  const getGreeting = () => { const h=currentTime.getHours(); if(h<12)return{text:'Good Morning',icon:'🌅',tod:'morning'}; if(h<17)return{text:'Good Afternoon',icon:'☀️',tod:'afternoon'}; return{text:'Good Evening',icon:'🌙',tod:'evening'}; };
+  const getAptIcon = (n) => ({'A':'🏢','B':'🏬','C':'🏗️','D':'🏘️'}[n?.charAt(0)?.toUpperCase()]||'🏢');
+  const getAptGrad = (g) => g.pendingCount===0?'linear-gradient(135deg,#e8f5e9,#c8e6c9)':g.completedCount>0?'linear-gradient(135deg,#fff8e1,#ffecb3)':'linear-gradient(135deg,#f5f5f5,#eee)';
+  const isPaused = (c) => c.preferences?.wantMilk===false;
+  const getMilk = (c) => !c.preferences?'':!c.preferences.wantMilk?'⏸️ Paused':`${c.preferences.quantity||2}×${c.preferences.packSize||'500ml'}`;
+  const isSkip = (c) => c.preferences?.skipDays?.length?c.preferences.skipDays.includes(new Date().toLocaleDateString('en-US',{weekday:'short'})):false;
 
-  const getGreeting = () => {
-    const hour = currentTime.getHours();
-    if (hour < 12) return { text: 'Good Morning', icon: '🌅', timeOfDay: 'morning' };
-    if (hour < 17) return { text: 'Good Afternoon', icon: '☀️', timeOfDay: 'afternoon' };
-    return { text: 'Good Evening', icon: '🌙', timeOfDay: 'evening' };
-  };
-
-  const getApartmentIcon = (name) => {
-    const icons = { 'A': '🏢', 'B': '🏬', 'C': '🏗️', 'D': '🏘️', '1': '🏠', '2': '🏡', '3': '🏘️', '4': '🏚️' };
-    return icons[name?.charAt(0)?.toUpperCase()] || '🏢';
-  };
-
-  const getApartmentGradient = (group) => {
-    if (group.pendingCount === 0) return 'linear-gradient(135deg, #e8f5e9, #c8e6c9)';
-    if (group.completedCount > 0) return 'linear-gradient(135deg, #fff8e1, #ffecb3)';
-    return 'linear-gradient(135deg, #f5f5f5, #eeeeee)';
-  };
-
-  const isPaused = (customer) => customer.preferences && customer.preferences.wantMilk === false;
-
-  const getMilkQuantity = (customer) => {
-    if (!customer.preferences) return '';
-    if (!customer.preferences.wantMilk) return '⏸️ Paused';
-    return `${customer.preferences.quantity || 2} × ${customer.preferences.packSize || '500ml'}`;
-  };
-
-  const isSkipDay = (customer) => {
-    if (!customer.preferences?.skipDays?.length) return false;
-    const today = new Date().toLocaleDateString('en-US', { weekday: 'short' });
-    return customer.preferences.skipDays.includes(today);
-  };
-
-  const pendingCustomers = customers.filter(c => !c.delivered);
-  const completedCustomers = customers.filter(c => c.delivered);
-  const progressPercent = customers.length > 0 ? Math.round((completedCustomers.length / customers.length) * 100) : 0;
+  const pendingC = customers.filter(c=>!c.delivered);
+  const completedC = customers.filter(c=>c.delivered);
+  const progress = customers.length?Math.round((completedC.length/customers.length)*100):0;
   const greeting = getGreeting();
+  const displayC = activeTab==='pending'?pendingC:completedC;
+  const filtered = displayC.filter(c=>(c.name||'').toLowerCase().includes(searchTerm.toLowerCase())||(c.phone||'').includes(searchTerm)||(c.apartment||'').toLowerCase().includes(searchTerm.toLowerCase())||(c.flat_no||'').toLowerCase().includes(searchTerm.toLowerCase()));
 
-  const displayCustomers = activeTab === 'pending' ? pendingCustomers : completedCustomers;
-  const filteredCustomers = displayCustomers.filter(c =>
-    (c.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (c.phone || '').includes(searchTerm) ||
-    (c.apartment || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (c.flat_no || '').toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const aptGroups = (()=>{const g={};filtered.forEach(c=>{const a=c.apartment||'Other';if(!g[a])g[a]={name:a,customers:[],totalAmount:0,completedCount:0,pendingCount:0};const t=(c.products||[]).reduce((s,p)=>s+((p.price||0)*(p.quantity||p.quantity_per_day||1)),0);g[a].customers.push(c);g[a].totalAmount+=t;if(c.delivered)g[a].completedCount++;else g[a].pendingCount++;});return Object.values(g).sort((a,b)=>a.name.localeCompare(b.name));})();
 
-  const apartmentGroups = (() => {
-    const grouped = {};
-    filteredCustomers.forEach(c => {
-      const apt = c.apartment || 'Other';
-      if (!grouped[apt]) grouped[apt] = { name: apt, customers: [], totalAmount: 0, completedCount: 0, pendingCount: 0, flats: [] };
-      const products = c.products || [];
-      const customerTotal = products.reduce((s, p) => s + ((p.price || 0) * (p.quantity || p.quantity_per_day || 1)), 0);
-      grouped[apt].customers.push(c);
-      grouped[apt].totalAmount += customerTotal;
-      grouped[apt].flats.push(c.flat_no || 'N/A');
-      if (c.delivered) grouped[apt].completedCount++;
-      else grouped[apt].pendingCount++;
-    });
-    return Object.values(grouped).sort((a, b) => a.name.localeCompare(b.name));
-  })();
-
-  if (loading) {
-    return (
-      <div className="dd-pro-loading">
-        <div className="dd-pro-loading-animation">
-          <div className="dd-pro-scooter">🛵</div>
-          <div className="dd-pro-road"></div>
-        </div>
-        <p>Loading your route...</p>
-      </div>
-    );
-  }
+  if (loading) return (<div className="dd-load"><div className="dd-load-scooter">🛵</div><p>Loading route...</p></div>);
 
   return (
-    <div className={`dd-pro-app ${greeting.timeOfDay}`}>
-      {/* Toast */}
-      {message && (
-        <div className={`dd-pro-toast ${message.type}`}>
-          <span>{message.text}</span>
-          <button onClick={() => setMessage(null)}>×</button>
-        </div>
-      )}
-
-      {/* ✅ MORNING BANNER - Only show undelivered orders count */}
-      {showOrdersBanner && extraOrdersCount > 0 && (
-        <div className="dd-pro-morning-banner">
-          <div className="dd-pro-banner-content">
-            <span className="dd-pro-banner-icon">🌅</span>
-            <div className="dd-pro-banner-text">
-              <strong>Good Morning! {extraOrdersCount} extra product orders today</strong>
-              <p>Customers ordered additional items. Check below for details.</p>
-            </div>
-            <button onClick={() => setShowOrdersBanner(false)} className="dd-pro-banner-close">×</button>
-          </div>
-        </div>
-      )}
+    <div className={`dd-app ${greeting.tod}`}>
+      {message && <div className={`dd-toast ${message.type}`}><span>{message.text}</span><button onClick={()=>setMessage(null)}>×</button></div>}
 
       {/* Header */}
-      <div className="dd-pro-header">
-        <div className="dd-pro-header-left">
-          <div className="dd-pro-avatar-wrapper" onClick={() => setShowProfile(!showProfile)}>
-            <div className="dd-pro-avatar">{userData?.name?.charAt(0)?.toUpperCase() || 'D'}</div>
-            <div className="dd-pro-avatar-ring" style={{ background: `conic-gradient(#4caf50 ${progressPercent * 3.6}deg, #e0e0e0 ${progressPercent * 3.6}deg)` }}></div>
-          </div>
-          <div>
-            <p className="dd-pro-greeting">{greeting.icon} {greeting.text}</p>
-            <h2>{userData?.name || 'Delivery Partner'}</h2>
-          </div>
+      <header className="dd-hdr">
+        <div className="dd-hdr-user" onClick={()=>setShowProfile(!showProfile)}>
+          <div className="dd-hdr-avatar-ring"><div className="dd-hdr-avatar">{userData?.name?.charAt(0)?.toUpperCase()||'D'}</div><div className={`dd-hdr-pulse ${pulseAnim?'active':''}`}></div></div>
+          <div><small>{greeting.icon} {greeting.text}</small><h2>{userData?.name||'Partner'}</h2></div>
         </div>
-        <div className="dd-pro-header-right">
-          <button className="dd-pro-notif-btn">
-            🔔
-            {(todayStats.pending + extraOrdersCount) > 0 && 
-              <span className="dd-pro-notif-badge">{todayStats.pending + extraOrdersCount}</span>}
-          </button>
-        </div>
-      </div>
+        <button className="dd-hdr-notif">🔔{(todayStats.pending+extraOrdersCount)>0&&<span className="dd-hdr-badge">{todayStats.pending+extraOrdersCount}</span>}</button>
+      </header>
 
-      {/* Profile Popup */}
-      {showProfile && (
-        <div className="dd-pro-profile-card">
-          <div className="dd-pro-profile-top">
-            <div className="dd-pro-profile-avatar">{userData?.name?.charAt(0)?.toUpperCase()}</div>
-            <h3>{userData?.name}</h3>
-            <p>🛵 {userData?.vehicle} • {userData?.shift} Shift</p>
-          </div>
-          <div className="dd-pro-profile-stats-row">
-            <div className="dd-pro-profile-stat"><span>📱</span><span>{userData?.phone}</span></div>
-            <div className="dd-pro-profile-stat"><span>📍</span><span>{userData?.area || 'All'}</span></div>
-            <div className="dd-pro-profile-stat"><span>💰</span><span>₹{userData?.salary}/mo</span></div>
-          </div>
-          <button onClick={handleLogout} className="dd-pro-logout-btn">🚪 Logout</button>
+      {/* Banner */}
+      {showBanner && extraOrdersCount>0 && (
+        <div className="dd-banner">
+          <span>🌅</span><div><strong>{extraOrdersCount} extra orders today</strong><p>Check customer cards below</p></div>
+          <button onClick={()=>setShowBanner(false)}>×</button>
         </div>
       )}
 
-      {/* Stats Card */}
-      <div className="dd-pro-main-card">
-        <div className="dd-pro-main-card-header">
-          <div><h3>Today's Route</h3><p>{new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'short' })}</p></div>
-          <div className="dd-pro-progress-circle">
-            <svg viewBox="0 0 60 60">
-              <circle cx="30" cy="30" r="25" fill="none" stroke="#e0e0e0" strokeWidth="6" />
-              <circle cx="30" cy="30" r="25" fill="none" stroke="#4caf50" strokeWidth="6" strokeDasharray={`${progressPercent * 1.57} 157`} strokeLinecap="round" transform="rotate(-90 30 30)" />
-            </svg>
-            <span className="dd-pro-progress-text">{progressPercent}%</span>
+      {/* Profile */}
+      {showProfile && (
+        <div className="dd-prof">
+          <div className="dd-prof-avatar">{userData?.name?.charAt(0)}</div>
+          <h3>{userData?.name}</h3><p>🛵 {userData?.vehicle} • {userData?.shift}</p>
+          <div className="dd-prof-grid">
+            <div><span>📱</span><span>{userData?.phone}</span></div>
+            <div><span>📍</span><span>{userData?.area||'All'}</span></div>
+            <div><span>💰</span><span>₹{userData?.salary}/mo</span></div>
           </div>
+          <button onClick={handleLogout} className="dd-prof-logout">🚪 Logout</button>
         </div>
-        <div className="dd-pro-stats-row">
-          <div className="dd-pro-stat-item"><div className="dd-pro-stat-icon" style={{background:'#f0fdf4'}}>📦</div><span className="dd-pro-stat-value">{customers.length}</span><span className="dd-pro-stat-label">Total</span></div>
-          <div className="dd-pro-stat-item"><div className="dd-pro-stat-icon" style={{background:'#fff3e0'}}>⏳</div><span className="dd-pro-stat-value">{todayStats.pending}</span><span className="dd-pro-stat-label">Pending</span></div>
-          <div className="dd-pro-stat-item"><div className="dd-pro-stat-icon" style={{background:'#e8f5e9'}}>✅</div><span className="dd-pro-stat-value">{todayStats.deliveries}</span><span className="dd-pro-stat-label">Done</span></div>
-          <div className="dd-pro-stat-item"><div className="dd-pro-stat-icon" style={{background:'#e3f2fd'}}>💰</div><span className="dd-pro-stat-value">₹{todayStats.collected}</span><span className="dd-pro-stat-label">Cash</span></div>
-        </div>
-        <div className="dd-pro-bar-wrapper">
-          <div className="dd-pro-bar">
-            <div className="dd-pro-bar-fill" style={{ width: `${progressPercent}%` }}>{progressPercent > 0 && <span className="dd-pro-bar-emoji">🛵</span>}</div>
+      )}
+
+      <main className="dd-main">
+        {/* HOME TAB */}
+        {activeTab==='home'&&(<>
+          <div className="dd-stats">
+            <div className="dd-stat"><span>📦</span><strong>{customers.length}</strong><small>Total</small></div>
+            <div className="dd-stat pending"><span>⏳</span><strong>{todayStats.pending}</strong><small>Pending</small></div>
+            <div className="dd-stat done"><span>✅</span><strong>{todayStats.deliveries}</strong><small>Done</small></div>
+            <div className="dd-stat cash"><span>💰</span><strong>₹{todayStats.collected}</strong><small>Cash</small></div>
           </div>
-        </div>
-      </div>
 
-      {/* Quick Actions */}
-      <div className="dd-pro-quick-actions">
-        <button className="dd-pro-quick-btn" onClick={() => setActiveTab('pending')}><span>🚀</span> Start Delivery</button>
-        <button className="dd-pro-quick-btn" onClick={() => window.open('https://maps.google.com', '_blank')}><span>🗺️</span> View Route</button>
-      </div>
+          <div className="dd-prog"><div className="dd-prog-bar"><div className="dd-prog-fill" style={{width:`${progress}%`}}>{progress>10&&<span>{progress}%</span>}</div></div></div>
 
-      {/* Search */}
-      <div className="dd-pro-search">
-        <span>🔍</span>
-        <input type="text" placeholder="Search customers, apartments..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
-        {searchTerm && <button onClick={() => setSearchTerm('')}>×</button>}
-      </div>
+          <div className="dd-quick"><button onClick={()=>setActiveTab('pending')}>🚀 Start</button><button onClick={()=>window.open('https://maps.google.com','_blank')}>🗺️ Map</button></div>
 
-      {/* Tabs */}
-      <div className="dd-pro-tabs">
-        <button className={`dd-pro-tab ${activeTab === 'pending' ? 'active' : ''}`} onClick={() => setActiveTab('pending')}>⏳ Pending ({pendingCustomers.length})</button>
-        <button className={`dd-pro-tab ${activeTab === 'completed' ? 'active' : ''}`} onClick={() => setActiveTab('completed')}>✅ Done ({completedCustomers.length})</button>
-      </div>
+          <div className="dd-srch"><span>🔍</span><input placeholder="Search..." value={searchTerm} onChange={e=>setSearchTerm(e.target.value)}/>{searchTerm&&<button onClick={()=>setSearchTerm('')}>×</button>}</div>
 
-      {/* Customer List */}
-      <div className="dd-pro-customer-list">
-        {apartmentGroups.length === 0 ? (
-          <div className="dd-pro-empty">
-            <div className="dd-pro-empty-animation"><span>{activeTab === 'pending' ? '🎉' : '📭'}</span><div className="dd-pro-empty-ripple"></div></div>
-            <h3>{activeTab === 'pending' ? 'All Caught Up!' : 'No Deliveries'}</h3>
-            <p>{activeTab === 'pending' ? 'Great job! ☕' : 'Start your deliveries'}</p>
+          <div className="dd-tabs">
+            <button className={activeTab==='pending'?'active':''} onClick={()=>setActiveTab('pending')}>⏳ {pendingC.length} Pending</button>
+            <button className={activeTab==='completed'?'active':''} onClick={()=>setActiveTab('completed')}>✅ {completedC.length} Done</button>
           </div>
-        ) : (
-          apartmentGroups.map((group, groupIndex) => {
-            const isExpanded = expandedApt === group.name;
-            const completionPercent = group.customers.length > 0 ? Math.round((group.completedCount / group.customers.length) * 100) : 0;
-            const allDone = group.pendingCount === 0;
 
-            return (
-              <div key={group.name} className={`dd-pro-apt-building ${isExpanded ? 'expanded' : ''} ${allDone ? 'completed' : ''}`} style={{ animationDelay: `${groupIndex * 0.05}s` }}>
-                <div className="dd-pro-building-header" onClick={() => setExpandedApt(isExpanded ? null : group.name)} style={{ background: getApartmentGradient(group) }}>
-                  <div className="dd-pro-building-icon-wrapper">
-                    <span className="dd-pro-building-icon">{getApartmentIcon(group.name)}</span>
-                    {!allDone && group.pendingCount > 0 && <span className="dd-pro-building-pulse"></span>}
-                  </div>
-                  <div className="dd-pro-building-info">
-                    <div className="dd-pro-building-name-row"><h3>{group.name}</h3><span className={`dd-pro-building-status ${allDone ? 'done' : 'active'}`}>{allDone ? '✅' : '🟢'}</span></div>
-                    <div className="dd-pro-building-stats-row">
-                      <span className="dd-pro-building-stat">📦 {group.customers.length}</span>
-                      <span className="dd-pro-building-stat">⏳ {group.pendingCount}</span>
-                      <span className="dd-pro-building-stat">💰 ₹{group.totalAmount}</span>
+          <div className="dd-list">
+            {aptGroups.length===0?<div className="dd-empty"><span>{activeTab==='pending'?'🎉':'📭'}</span><p>{activeTab==='pending'?'All done!☕':'No deliveries'}</p></div>:
+              aptGroups.map(group=>{
+                const isExp=expandedApt===group.name;
+                const pct=group.customers.length?Math.round((group.completedCount/group.customers.length)*100):0;
+                const allDone=group.pendingCount===0;
+                return (
+                  <div key={group.name} className={`dd-bld ${isExp?'exp':''} ${allDone?'alldone':''}`}>
+                    <div className="dd-bld-hdr" onClick={()=>setExpandedApt(isExp?null:group.name)} style={{background:getAptGrad(group)}}>
+                      <span className="dd-bld-icon">{getAptIcon(group.name)}</span>
+                      <div className="dd-bld-info"><strong>{group.name}</strong><small>{group.customers.length} flats • ₹{group.totalAmount}</small></div>
+                      <div className="dd-bld-right">
+                        <div className="dd-bld-ring"><svg viewBox="0 0 36 36"><circle cx="18" cy="18" r="14" fill="none" stroke="#ddd" strokeWidth="3"/><circle cx="18" cy="18" r="14" fill="none" stroke={allDone?'#4caf50':'#f59e0b'} strokeWidth="3" strokeDasharray={`${pct*0.88} 88`} strokeLinecap="round" transform="rotate(-90 18 18)"/></svg><span>{pct}%</span></div>
+                        <span className={`dd-bld-arr ${isExp?'up':''}`}>▼</span>
+                      </div>
                     </div>
-                  </div>
-                  <div className="dd-pro-building-right">
-                    <div className="dd-pro-mini-progress">
-                      <svg viewBox="0 0 44 44">
-                        <circle cx="22" cy="22" r="18" fill="none" stroke="#e0e0e0" strokeWidth="3" />
-                        <circle cx="22" cy="22" r="18" fill="none" stroke={allDone ? '#4caf50' : '#ff9800'} strokeWidth="3" strokeDasharray={`${completionPercent * 1.13} 113`} strokeLinecap="round" transform="rotate(-90 22 22)" />
-                      </svg>
-                      <span className="dd-pro-mini-percent">{completionPercent}%</span>
-                    </div>
-                    <span className={`dd-pro-expand-icon ${isExpanded ? 'rotated' : ''}`}>▼</span>
-                  </div>
-                </div>
-
-                {isExpanded && (
-                  <div className="dd-pro-simple-list-container">
-                    {group.customers.map((customer, index) => {
-                      const products = customer.products || [];
-                      const productDisplay = products.map(p => `${p.pack_size || ''} ${p.product_name}`).join(', ') || 'No items';
-                      const milkQty = getMilkQuantity(customer);
-                      const paused = isPaused(customer);
-                      const skipDay = isSkipDay(customer);
-                      const shouldBlockDelivery = paused || skipDay;
-                      
-                      // ✅ Show only UNDELIVERED extra orders
-                      const pendingExtraOrders = (customer.extraOrders || []).filter(o => o.status !== 'delivered');
-                      
+                    {isExp&&group.customers.map(c=>{
+                      const prods=c.products||[];
+                      const total=prods.reduce((s,p)=>s+((p.price||0)*(p.quantity||p.quantity_per_day||1)),0);
+                      const paused=isPaused(c);const skip=isSkip(c);
+                      const pOrders=(c.extraOrders||[]).filter(o=>o.status!=='delivered');
                       return (
-                        <div key={customer.id} className={`dd-pro-list-row ${customer.delivered ? 'done' : ''} ${paused ? 'paused' : ''} ${skipDay ? 'skip' : ''}`}>
-                          <div className="dd-pro-list-left">
-                            <div className="dd-pro-list-avatar" style={{ background: paused ? '#ef4444' : skipDay ? '#f59e0b' : customer.delivered ? '#4caf50' : '#667eea' }}>
-                              {customer.name?.charAt(0)?.toUpperCase()}
-                            </div>
-                            <div className="dd-pro-list-info">
-                              <h4>
-                                {customer.name}
-                                {paused && <span className="dd-pro-pause-badge">⏸️ Paused</span>}
-                                {skipDay && !paused && <span className="dd-pro-skip-badge">🚫 Skip Today</span>}
-                              </h4>
-                              <p>🚪 {customer.flat_no || 'N/A'}, {customer.apartment}</p>
-                              {milkQty && <p className="dd-pro-milk-pref">🥛 {milkQty}</p>}
-                              
-                              {/* ✅ ONLY PENDING EXTRA ORDERS */}
-                              {pendingExtraOrders.length > 0 && (
-                                <div className="dd-pro-extra-orders">
-                                  <span className="dd-pro-extra-label">📦 Orders:</span>
-                                  {pendingExtraOrders.map((order, i) => (
-                                    <span key={i} className="dd-pro-extra-tag">
-                                      {order.productName} ({order.packSize}) ×{order.quantity}
-                                    </span>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
+                        <div key={c.id} className={`dd-crow ${c.delivered?'del':''} ${paused?'pau':''} ${skip?'skp':''}`}>
+                          <div className="dd-crow-avatar" style={{background:paused?'#ef4444':skip?'#f59e0b':c.delivered?'#4caf50':'#667eea'}}>{c.name?.charAt(0)}</div>
+                          <div className="dd-crow-info">
+                            <strong>{c.name}{paused&&' ⏸️'}{skip&&' 🚫'}</strong>
+                            <p>🚪{c.flat_no||'?'} · 🏢{c.apartment}</p>
+                            <span className="dd-crow-milk">{getMilk(c)}</span>
+                            {pOrders.length>0&&<div className="dd-crow-orders">{pOrders.map((o,i)=><span key={i}>{o.productName}({o.packSize})×{o.quantity}</span>)}</div>}
                           </div>
-
-                          <div className="dd-pro-list-center">
-                            {shouldBlockDelivery ? (
-                              <span className="dd-pro-list-warning">{paused ? '⏸️ Milk Paused' : '🚫 Skip Day'}</span>
-                            ) : (
-                              <span className="dd-pro-list-product">{productDisplay}</span>
-                            )}
-                          </div>
-
-                          <div className="dd-pro-list-right">
-                            <div className="dd-pro-list-status-row">
-                              {paused ? <span className="dd-pro-list-status paused">⏸️ Paused</span> :
-                               skipDay ? <span className="dd-pro-list-status skip">🚫 Skip</span> :
-                               customer.delivered ? <span className="dd-pro-list-status done">✅ Done</span> :
-                               <span className="dd-pro-list-status pending">⏳ Pending</span>}
-                            </div>
-                            <div className="dd-pro-list-action-row">
-                              <a href={`tel:${customer.phone}`} className="dd-pro-list-icon-btn" title="Call">📞</a>
-                              <button onClick={() => { const addr = [customer.apartment, customer.flat_no, customer.area, 'Hyderabad'].filter(Boolean).join(', '); window.open(`https://maps.google.com/?q=${encodeURIComponent(addr)}`, '_blank'); }} className="dd-pro-list-icon-btn" title="Directions">🗺️</button>
-                              {shouldBlockDelivery && !customer.delivered ? (
-                                <button onClick={() => { if (paused) showMessage('error', `⚠️ ${customer.name} has PAUSED milk!`); else showMessage('error', `⚠️ Skip day for ${customer.name}!`); }} className="dd-pro-list-blocked-btn" title="DO NOT DELIVER">🚫</button>
-                              ) : !customer.delivered ? (
-                                <button onClick={() => markDelivered(customer.id)} className="dd-pro-list-deliver-btn" disabled={deliveringId === customer.id}>{deliveringId === customer.id ? '⏳' : '✓'}</button>
-                              ) : (
-                                <button onClick={() => undoDelivery(customer.id)} className="dd-pro-list-undo-btn" title="Undo">↩</button>
-                              )}
+                          <div className="dd-crow-right">
+                            <strong>₹{total}</strong>
+                            <div className="dd-crow-acts">
+                              <a href={`tel:${c.phone}`} className="dd-crow-btn">📞</a>
+                              <button onClick={()=>{const a=[c.apartment,c.flat_no,c.area,'Hyderabad'].filter(Boolean).join(',');window.open(`https://maps.google.com/?q=${encodeURIComponent(a)}`,'_blank');}} className="dd-crow-btn">🗺️</button>
+                              {(paused||skip)&&!c.delivered?<button className="dd-crow-block" onClick={()=>showMessage('error',paused?'Paused!':'Skip!')}>🚫</button>:
+                               !c.delivered?<button className="dd-crow-done" onClick={()=>markDelivered(c.id)} disabled={deliveringId===c.id}>{deliveringId===c.id?'⏳':'✓'}</button>:
+                               <button className="dd-crow-undo" onClick={()=>undoDelivery(c.id)}>↩</button>}
                             </div>
                           </div>
                         </div>
                       );
                     })}
                   </div>
-                )}
-              </div>
-            );
-          })
+                );
+              })
+            }
+          </div>
+        </>)}
+
+        {/* HISTORY TAB */}
+        {activeTab==='history'&&(
+          <div className="dd-hist">
+            <h3>📜 Today's Deliveries</h3>
+            {completedC.length===0?<div className="dd-empty"><span>📭</span><p>No deliveries yet</p></div>:
+              completedC.map(c=>(
+                <div key={c.id} className="dd-hist-card">
+                  <div className="dd-hist-dot"></div>
+                  <div className="dd-hist-info">
+                    <small>{new Date().toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'short'})}</small>
+                    <strong>{c.name}</strong>
+                    <p>🚪{c.flat_no} · {(c.products||[]).map(p=>p.product_name).join(', ')}</p>
+                    <span>₹{c.deliveryData?.total_amount||0}</span>
+                  </div>
+                  <button onClick={()=>undoDelivery(c.id)} className="dd-hist-undo">↩</button>
+                </div>
+              ))
+            }
+          </div>
         )}
-      </div>
-      <div style={{ height: '100px' }}></div>
+      </main>
+
+      {/* Bottom Nav */}
+      <nav className="dd-nav">
+        {[{id:'home',icon:'🏠',label:'Home'},{id:'pending',icon:'📋',label:'Pending',badge:todayStats.pending},{id:'history',icon:'📜',label:'History'},{id:'profile',icon:'👤',label:'Me'}].map(item=>(
+          <button key={item.id} className={`dd-nav-item ${activeTab===item.id||(item.id==='pending'&&activeTab==='pending')?'active':''}`} onClick={()=>{if(item.id==='profile')setShowProfile(true);else if(item.id==='pending')setActiveTab('pending');else setActiveTab(item.id);}}>
+            <span className="dd-nav-icon">{item.icon}</span><span className="dd-nav-label">{item.label}</span>
+            {item.badge>0&&<span className="dd-nav-dot">{item.badge}</span>}
+          </button>
+        ))}
+      </nav>
     </div>
   );
 };

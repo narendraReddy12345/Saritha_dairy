@@ -11,7 +11,14 @@ const AddPurchase = () => {
   const [activeTab, setActiveTab] = useState('add');
   const [searchTerm, setSearchTerm] = useState('');
   const [products, setProducts] = useState([]);
+  const [uniqueProducts, setUniqueProducts] = useState([]); // New state for unique products
   const [message, setMessage] = useState(null);
+  
+  // New state for filtering
+  const [dateFilter, setDateFilter] = useState('all'); // all, today, yesterday, week, month, custom
+  const [customStartDate, setCustomStartDate] = useState('');
+  const [customEndDate, setCustomEndDate] = useState('');
+  const [showCustomDate, setShowCustomDate] = useState(false);
 
   const [formData, setFormData] = useState({
     productName: '',
@@ -57,6 +64,15 @@ const AddPurchase = () => {
       const result = await response.json();
       if (result.success) {
         setProducts(result.data);
+        
+        // Create unique products by name (remove duplicates)
+        const productMap = new Map();
+        result.data.forEach(product => {
+          if (!productMap.has(product.name)) {
+            productMap.set(product.name, product);
+          }
+        });
+        setUniqueProducts(Array.from(productMap.values()));
       }
     } catch (error) {
       console.error('Error fetching products:', error);
@@ -81,6 +97,436 @@ const AddPurchase = () => {
     }
   };
 
+  // Date filter functions
+  const isToday = (dateStr) => {
+    const today = new Date().toISOString().split('T')[0];
+    return dateStr === today;
+  };
+
+  const isYesterday = (dateStr) => {
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    return dateStr === yesterday.toISOString().split('T')[0];
+  };
+
+  const isLast7Days = (dateStr) => {
+    const date = new Date(dateStr);
+    const today = new Date();
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(today.getDate() - 7);
+    return date >= sevenDaysAgo && date <= today;
+  };
+
+  const isLast30Days = (dateStr) => {
+    const date = new Date(dateStr);
+    const today = new Date();
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(today.getDate() - 30);
+    return date >= thirtyDaysAgo && date <= today;
+  };
+
+  const isInCustomRange = (dateStr) => {
+    if (!customStartDate || !customEndDate) return true;
+    const date = new Date(dateStr);
+    const start = new Date(customStartDate);
+    const end = new Date(customEndDate);
+    end.setHours(23, 59, 59);
+    return date >= start && date <= end;
+  };
+
+  // Filter purchases based on selected filter
+  const getFilteredPurchases = () => {
+    let filtered = [...purchases];
+
+    switch(dateFilter) {
+      case 'today':
+        filtered = filtered.filter(p => isToday(p.purchase_date?.split('T')[0]));
+        break;
+      case 'yesterday':
+        filtered = filtered.filter(p => isYesterday(p.purchase_date?.split('T')[0]));
+        break;
+      case 'week':
+        filtered = filtered.filter(p => isLast7Days(p.purchase_date?.split('T')[0]));
+        break;
+      case 'month':
+        filtered = filtered.filter(p => isLast30Days(p.purchase_date?.split('T')[0]));
+        break;
+      case 'custom':
+        filtered = filtered.filter(p => isInCustomRange(p.purchase_date?.split('T')[0]));
+        break;
+      default:
+        break;
+    }
+
+    // Apply search filter
+    if (searchTerm) {
+      filtered = filtered.filter(purchase =>
+        purchase.product_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        purchase.farm_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        purchase.invoice_number?.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    }
+
+    // Sort by date (newest first)
+    return filtered.sort((a, b) => new Date(b.purchase_date) - new Date(a.purchase_date));
+  };
+
+  // Handle filter change
+  const handleDateFilterChange = (value) => {
+    setDateFilter(value);
+    setShowCustomDate(value === 'custom');
+    if (value !== 'custom') {
+      setCustomStartDate('');
+      setCustomEndDate('');
+    }
+  };
+
+  // Download as CSV
+  const downloadCSV = () => {
+    const filteredPurchases = getFilteredPurchases();
+    
+    if (filteredPurchases.length === 0) {
+      showMessage('No data to download', 'error');
+      return;
+    }
+
+    // Define CSV headers
+    const headers = [
+      'S.No',
+      'Date',
+      'Product Name',
+      'Quantity',
+      'Unit',
+      'Price Per Unit (₹)',
+      'Total Cost (₹)',
+      'Supplier/Farm',
+      'Invoice Number',
+      'Notes',
+      'Remaining Stock'
+    ];
+
+    // Prepare rows
+    const rows = filteredPurchases.map((purchase, index) => [
+      index + 1,
+      new Date(purchase.purchase_date).toLocaleDateString('en-IN'),
+      purchase.product_name,
+      purchase.quantity,
+      purchase.unit || 'Litre',
+      purchase.price_per_unit,
+      purchase.total_cost,
+      purchase.farm_name || '-',
+      purchase.invoice_number || '-',
+      purchase.notes || '-',
+      purchase.remaining_quantity ? `${purchase.remaining_quantity} ${purchase.unit || 'Litre'}` : 'N/A'
+    ]);
+
+    // Create CSV content
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
+    ].join('\n');
+
+    // Add BOM for UTF-8 encoding (handles Indian Rupee symbol)
+    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+    
+    // Create download link
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `purchase_history_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    
+    showMessage(`✅ Downloaded ${filteredPurchases.length} records`);
+  };
+
+  // Generate print table HTML
+  const generatePrintTable = (data) => {
+    if (!data || data.length === 0) {
+      return '<p>No data available</p>';
+    }
+    
+    let tableHtml = `
+      <table>
+        <thead>
+          <tr>
+            <th>S.No</th>
+            <th>Date</th>
+            <th>Product</th>
+            <th>Quantity</th>
+            <th>Unit</th>
+            <th>Rate (₹)</th>
+            <th>Total (₹)</th>
+            <th>Supplier</th>
+            <th>Invoice No</th>
+            <th>Stock Left</th>
+          </tr>
+        </thead>
+        <tbody>
+    `;
+    
+    data.forEach((purchase, index) => {
+      const remainingStock = parseFloat(purchase.remaining_quantity || purchase.quantity);
+      
+      tableHtml += `
+        <tr>
+          <td>${index + 1}</td>
+          <td>${new Date(purchase.purchase_date).toLocaleDateString('en-IN')}</td>
+          <td>${purchase.product_name || '-'}</td>
+          <td style="text-align: right">${purchase.quantity}</td>
+          <td>${purchase.unit || 'Litre'}</td>
+          <td style="text-align: right">₹${purchase.price_per_unit}</td>
+          <td style="text-align: right">₹${Number(purchase.total_cost).toLocaleString()}</td>
+          <td>${purchase.farm_name || '-'}</td>
+          <td>${purchase.invoice_number || '-'}</td>
+          <td style="text-align: right">${remainingStock.toFixed(2)} ${purchase.unit || 'Litre'}</td>
+        </tr>
+      `;
+    });
+    
+    // Calculate total amount only (remove rate total)
+    const totalAmount = calculateTotalAmount(data);
+    
+    tableHtml += `
+        </tbody>
+        <tfoot>
+          <tr style="background: #f1f5f9; font-weight: bold;">
+            <td colspan="6"><strong>GRAND TOTAL</strong></td>
+            <td style="text-align: right"><strong>₹${totalAmount.toLocaleString()}</strong></td>
+            <td colspan="3"></td>
+          </tr>
+        </tfoot>
+      </table>
+    `;
+    
+    return tableHtml;
+  };
+
+  // Get filter label for print
+  const getFilterLabel = () => {
+    switch(dateFilter) {
+      case 'today': return 'Today';
+      case 'yesterday': return 'Yesterday';
+      case 'week': return 'Last 7 Days';
+      case 'month': return 'Last 30 Days';
+      case 'custom': return `${customStartDate} to ${customEndDate}`;
+      default: return 'All Time';
+    }
+  };
+
+  // Print table
+  const printTable = () => {
+    const filteredPurchases = getFilteredPurchases();
+    if (filteredPurchases.length === 0) {
+      showMessage('No data to print', 'error');
+      return;
+    }
+
+    const totalAmount = calculateTotalAmount(filteredPurchases);
+    const totalQuantity = filteredPurchases.reduce((sum, p) => sum + (parseFloat(p.quantity) || 0), 0);
+
+    // Create a hidden iframe for printing
+    const printFrame = document.createElement('iframe');
+    printFrame.style.position = 'absolute';
+    printFrame.style.width = '0px';
+    printFrame.style.height = '0px';
+    printFrame.style.border = '0';
+    document.body.appendChild(printFrame);
+    
+    const printDoc = printFrame.contentWindow.document;
+    
+    // Write the content with proper styles
+    printDoc.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Purchase History Report - Saritha Dairy</title>
+          <meta charset="UTF-8">
+          <style>
+            * {
+              margin: 0;
+              padding: 0;
+              box-sizing: border-box;
+            }
+            
+            body {
+              font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+              padding: 20px;
+              background: white;
+              color: #333;
+            }
+            
+            .print-container {
+              max-width: 1200px;
+              margin: 0 auto;
+            }
+            
+            .header {
+              text-align: center;
+              margin-bottom: 30px;
+              padding-bottom: 20px;
+              border-bottom: 2px solid #3b82f6;
+            }
+            
+            .header h1 {
+              color: #1e293b;
+              font-size: 24px;
+              margin-bottom: 8px;
+            }
+            
+            .header .subtitle {
+              color: #64748b;
+              font-size: 14px;
+            }
+            
+            .filter-info {
+              background: #f8fafc;
+              padding: 12px 16px;
+              border-radius: 8px;
+              margin-bottom: 20px;
+              font-size: 13px;
+              border-left: 4px solid #3b82f6;
+            }
+            
+            .filter-info p {
+              margin: 4px 0;
+            }
+            
+            .stats {
+              display: flex;
+              gap: 20px;
+              margin-bottom: 25px;
+              padding: 15px;
+              background: #eff6ff;
+              border-radius: 8px;
+            }
+            
+            .stat-item {
+              flex: 1;
+              text-align: center;
+            }
+            
+            .stat-label {
+              font-size: 12px;
+              color: #475569;
+              margin-bottom: 4px;
+            }
+            
+            .stat-value {
+              font-size: 18px;
+              font-weight: bold;
+              color: #1e293b;
+            }
+            
+            table {
+              width: 100%;
+              border-collapse: collapse;
+              margin-top: 20px;
+              font-size: 12px;
+            }
+            
+            th {
+              background: #f1f5f9;
+              padding: 12px 8px;
+              text-align: left;
+              font-weight: 600;
+              color: #1e293b;
+              border: 1px solid #e2e8f0;
+            }
+            
+            td {
+              padding: 10px 8px;
+              border: 1px solid #e2e8f0;
+              vertical-align: top;
+            }
+            
+            tr:nth-child(even) {
+              background: #f8fafc;
+            }
+            
+            .footer {
+              margin-top: 30px;
+              padding-top: 20px;
+              text-align: center;
+              font-size: 11px;
+              color: #94a3b8;
+              border-top: 1px solid #e2e8f0;
+            }
+            
+            @media print {
+              body {
+                padding: 10px;
+              }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="print-container">
+            <div class="header">
+              <h1>🏪 Saritha Dairy - Purchase History Report</h1>
+              <div class="subtitle">Farm Purchase Records</div>
+            </div>
+            
+            <div class="filter-info">
+              <p><strong>📅 Filter Applied:</strong> ${getFilterLabel()}</p>
+              <p><strong>⏰ Generated on:</strong> ${new Date().toLocaleString()}</p>
+            </div>
+            
+            <div class="stats">
+              <div class="stat-item">
+                <div class="stat-label">Total Purchases</div>
+                <div class="stat-value">${filteredPurchases.length}</div>
+              </div>
+              <div class="stat-item">
+                <div class="stat-label">Total Quantity</div>
+                <div class="stat-value">${totalQuantity.toFixed(2)}</div>
+              </div>
+              <div class="stat-item">
+                <div class="stat-label">Total Amount</div>
+                <div class="stat-value">₹${totalAmount.toLocaleString()}</div>
+              </div>
+            </div>
+            
+            ${generatePrintTable(filteredPurchases)}
+            
+            <div class="footer">
+              <p>This is a computer-generated document. No signature required.</p>
+              <p>Saritha Dairy - All Rights Reserved</p>
+            </div>
+          </div>
+          
+          <script>
+            window.onload = function() {
+              window.print();
+              setTimeout(function() {
+                window.close();
+              }, 500);
+            };
+          <\/script>
+        </body>
+      </html>
+    `);
+    
+    printDoc.close();
+    
+    // Remove iframe after printing
+    setTimeout(() => {
+      if (printFrame && printFrame.parentNode) {
+        document.body.removeChild(printFrame);
+      }
+    }, 1000);
+  };
+
+  const calculateTotalAmount = (data) => {
+    return data.reduce((sum, p) => sum + (parseFloat(p.total_cost) || 0), 0);
+  };
+
+  const calculateTotalRate = (data) => {
+    return data.reduce((sum, p) => sum + (parseFloat(p.price_per_unit) || 0), 0);
+  };
+
   const getProductIcon = (productName) => {
     if (!productName) return '📦';
     const n = productName.toLowerCase();
@@ -101,17 +547,6 @@ const AddPurchase = () => {
     if (n.includes('ghee')) return '#ef4444';
     if (n.includes('butter')) return '#8b5cf6';
     return '#64748b';
-  };
-
-  const getProductBgLight = (productName) => {
-    if (!productName) return '#f8fafc';
-    const n = productName.toLowerCase();
-    if (n.includes('milk')) return '#eff6ff';
-    if (n.includes('curd')) return '#f0fdf4';
-    if (n.includes('paneer')) return '#fffbeb';
-    if (n.includes('ghee')) return '#fef2f2';
-    if (n.includes('butter')) return '#faf5ff';
-    return '#f8fafc';
   };
 
   const handleQuantityChange = (e) => {
@@ -254,9 +689,6 @@ const AddPurchase = () => {
       notes: purchase.notes || ''
     });
     setTotalCost(purchase.quantity * purchase.price_per_unit);
-    setTimeout(() => {
-      document.getElementById('form-section')?.scrollIntoView({ behavior: 'smooth' });
-    }, 100);
   };
 
   const cancelEdit = () => {
@@ -268,13 +700,10 @@ const AddPurchase = () => {
     setTotalCost(0);
   };
 
-  const filteredPurchases = purchases.filter(purchase =>
-    purchase.product_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    purchase.farm_name?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
-  const totalAmount = purchases.reduce((sum, p) => sum + (parseFloat(p.total_cost) || 0), 0);
-  const totalQuantity = purchases.reduce((sum, p) => sum + (parseFloat(p.quantity) || 0), 0);
+  const filteredPurchases = getFilteredPurchases();
+  const totalAmount = calculateTotalAmount(filteredPurchases);
+  const totalQuantity = filteredPurchases.reduce((sum, p) => sum + (parseFloat(p.quantity) || 0), 0);
+  const totalRateSum = calculateTotalRate(filteredPurchases);
 
   return (
     <div className="purchase-tabs-container">
@@ -305,7 +734,7 @@ const AddPurchase = () => {
         <div className="stat-card-tab">
           <div className="stat-icon-tab">📋</div>
           <div className="stat-info-tab">
-            <span className="stat-value-tab">{purchases.length}</span>
+            <span className="stat-value-tab">{filteredPurchases.length}</span>
             <span className="stat-label-tab">Total Purchases</span>
           </div>
         </div>
@@ -357,9 +786,9 @@ const AddPurchase = () => {
                   <label>Product <span className="required">*</span></label>
                   <select value={formData.productName} onChange={handleProductSelect} required>
                     <option value="">-- Select Product --</option>
-                    {products.map((p, i) => (
+                    {uniqueProducts.map((p, i) => (
                       <option key={i} value={p.name}>
-                        {getProductIcon(p.name)} {p.name} 
+                        {getProductIcon(p.name)} {p.name}
                       </option>
                     ))}
                   </select>
@@ -425,86 +854,410 @@ const AddPurchase = () => {
       {activeTab === 'history' && (
         <div className="tab-content">
           <div className="history-card-tab">
-            <div className="history-header-tab">
-              <div className="search-wrapper-tab">
-                <span className="search-icon-tab">🔍</span>
-                <input 
-                  type="text" 
-                  placeholder="Search by product or supplier..." 
-                  value={searchTerm} 
-                  onChange={(e) => setSearchTerm(e.target.value)} 
-                />
-                <span className="result-count-tab">{filteredPurchases.length} entries</span>
+            {/* Filter Bar */}
+            <div className="filter-bar-tab">
+              <div className="filter-group-tab">
+                <label>Date Filter:</label>
+                <div className="filter-buttons-tab">
+                  <button 
+                    className={`filter-btn ${dateFilter === 'all' ? 'active' : ''}`}
+                    onClick={() => handleDateFilterChange('all')}
+                  >
+                    All
+                  </button>
+                  <button 
+                    className={`filter-btn ${dateFilter === 'today' ? 'active' : ''}`}
+                    onClick={() => handleDateFilterChange('today')}
+                  >
+                    Today
+                  </button>
+                  <button 
+                    className={`filter-btn ${dateFilter === 'yesterday' ? 'active' : ''}`}
+                    onClick={() => handleDateFilterChange('yesterday')}
+                  >
+                    Yesterday
+                  </button>
+                  <button 
+                    className={`filter-btn ${dateFilter === 'week' ? 'active' : ''}`}
+                    onClick={() => handleDateFilterChange('week')}
+                  >
+                    Last 7 Days
+                  </button>
+                  <button 
+                    className={`filter-btn ${dateFilter === 'month' ? 'active' : ''}`}
+                    onClick={() => handleDateFilterChange('month')}
+                  >
+                    Last 30 Days
+                  </button>
+                  <button 
+                    className={`filter-btn ${dateFilter === 'custom' ? 'active' : ''}`}
+                    onClick={() => handleDateFilterChange('custom')}
+                  >
+                    Custom
+                  </button>
+                </div>
+              </div>
+
+              {showCustomDate && (
+                <div className="custom-date-range-tab">
+                  <input 
+                    type="date" 
+                    value={customStartDate} 
+                    onChange={(e) => setCustomStartDate(e.target.value)}
+                    placeholder="Start Date"
+                  />
+                  <span>to</span>
+                  <input 
+                    type="date" 
+                    value={customEndDate} 
+                    onChange={(e) => setCustomEndDate(e.target.value)}
+                    placeholder="End Date"
+                  />
+                </div>
+              )}
+
+              <div className="search-export-tab">
+                <div className="search-wrapper-tab">
+                  <span className="search-icon-tab">🔍</span>
+                  <input 
+                    type="text" 
+                    placeholder="Search by product, supplier or invoice..." 
+                    value={searchTerm} 
+                    onChange={(e) => setSearchTerm(e.target.value)} 
+                  />
+                </div>
+                <div className="export-buttons-tab">
+                  <button className="export-btn csv-btn" onClick={downloadCSV}>
+                    📥 Download CSV
+                  </button>
+                  <button className="export-btn print-btn" onClick={printTable}>
+                    🖨️ Print
+                  </button>
+                </div>
               </div>
             </div>
 
             {filteredPurchases.length === 0 ? (
               <div className="empty-tab">
                 <div className="empty-icon-tab">📦</div>
-                <h3>No purchases yet</h3>
-                <p>Click "Add New Purchase" tab to get started</p>
+                <h3>No purchases found</h3>
+                <p>Try changing your filter or add a new purchase</p>
               </div>
             ) : (
-              <div className="timeline-tab">
-                {filteredPurchases.map((purchase) => {
-                  const remainingStock = parseFloat(purchase.remaining_quantity || purchase.quantity);
-                  const isFullyPacked = remainingStock <= 0;
-                  
-                  return (
-                    <div key={purchase.id} className="timeline-item-tab">
-                      <div className="timeline-dot-tab" style={{ background: getProductColor(purchase.product_name) }}></div>
-                      <div className="timeline-content-tab">
-                        <div className="timeline-header-tab">
-                          <div className="product-info-tab">
-                            <div className="product-badge-tab" style={{ background: getProductBgLight(purchase.product_name), color: getProductColor(purchase.product_name) }}>
-                              {getProductIcon(purchase.product_name)} {purchase.product_name}
-                            </div>
-                            <div className="date-tab">📅 {new Date(purchase.purchase_date).toLocaleDateString('en-IN')}</div>
-                          </div>
-                          <div className="actions-tab">
-                            <button className="edit-action-tab" onClick={() => handleEdit(purchase)}>✏️ Edit</button>
-                            <button className="delete-action-tab" onClick={() => handleDelete(purchase.id, purchase.product_name)}>🗑️ Delete</button>
-                          </div>
-                        </div>
-                        <div className="timeline-details-tab">
-                          <div className="detail-item-tab">
-                            <span className="detail-label-tab">Quantity:</span>
-                            <span className="detail-value-tab quantity">{purchase.quantity} {purchase.unit || 'Litre'}</span>
-                          </div>
-                          <div className="detail-item-tab">
-                            <span className="detail-label-tab">Rate:</span>
-                            <span className="detail-value-tab">₹{purchase.price_per_unit}</span>
-                          </div>
-                          <div className="detail-item-tab">
-                            <span className="detail-label-tab">Total:</span>
-                            <span className="detail-value-tab total">₹{Number(purchase.total_cost).toLocaleString()}</span>
-                          </div>
-                          <div className="detail-item-tab">
-                            <span className="detail-label-tab">Supplier:</span>
-                            <span className="detail-value-tab">{purchase.farm_name || '-'}</span>
-                          </div>
-                          {purchase.invoice_number && (
-                            <div className="detail-item-tab">
-                              <span className="detail-label-tab">Invoice:</span>
-                              <span className="detail-value-tab invoice">{purchase.invoice_number}</span>
-                            </div>
-                          )}
-                          <div className="detail-item-tab">
-                            <span className="detail-label-tab">Stock Status:</span>
-                            <span className={`detail-value-tab ${isFullyPacked ? 'status-finished' : 'status-available'}`}>
-                              {isFullyPacked ? '✅ Fully Packed' : `📦 ${remainingStock.toFixed(2)} ${purchase.unit} remaining`}
+              <div className="table-responsive-tab">
+                <table className="purchase-table-tab">
+                  <thead>
+                    <tr>
+                      <th>S.No</th>
+                      <th>Date</th>
+                      <th>Product</th>
+                      <th>Quantity</th>
+                      <th>Unit</th>
+                      <th>Rate (₹)</th>
+                      <th>Total (₹)</th>
+                      <th>Supplier</th>
+                      <th>Invoice</th>
+                      <th>Stock Left</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredPurchases.map((purchase, index) => {
+                      const remainingStock = parseFloat(purchase.remaining_quantity || purchase.quantity);
+                      const isLowStock = remainingStock > 0 && remainingStock < purchase.quantity * 0.2;
+                      
+                      return (
+                        <tr key={purchase.id}>
+                          <td>{index + 1}</td>
+                          <td>{new Date(purchase.purchase_date).toLocaleDateString('en-IN')}</td>
+                          <td>
+                            <span className="product-badge-table">
+                              {purchase.product_name}
                             </span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
+                          </td>
+                          <td>{purchase.quantity}</td>
+                          <td>{purchase.unit || 'Litre'}</td>
+                          <td>₹{purchase.price_per_unit}</td>
+                          <td className="total-cell">₹{Number(purchase.total_cost).toLocaleString()}</td>
+                          <td>{purchase.farm_name || '-'}</td>
+                          <td>{purchase.invoice_number || '-'}</td>
+                          <td>
+                            <span className={`stock-badge ${remainingStock <= 0 ? 'finished' : (isLowStock ? 'low' : 'available')}`}>
+                              {remainingStock <= 0 ? '✅ Finished' : `${remainingStock.toFixed(2)}`}
+                            </span>
+                          </td>
+                          <td className="action-cell">
+                            <button className="edit-action-table" onClick={() => handleEdit(purchase)} title="Edit">
+                              ✏️
+                            </button>
+                            <button className="delete-action-table" onClick={() => handleDelete(purchase.id, purchase.product_name)} title="Delete">
+                              🗑️
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  <tfoot>
+                    <tr className="table-footer-total">
+                    </tr>
+                  </tfoot>
+                </table>
               </div>
             )}
           </div>
         </div>
       )}
+
+      <style>{`
+        @keyframes slideInRight {
+          from { transform: translateX(100%); opacity: 0; }
+          to { transform: translateX(0); opacity: 1; }
+        }
+
+        /* Filter Bar Styles */
+        .filter-bar-tab {
+          background: white;
+          border-radius: 16px;
+          padding: 20px;
+          margin-bottom: 20px;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        }
+
+        .filter-group-tab {
+          margin-bottom: 15px;
+        }
+
+        .filter-group-tab label {
+          font-weight: 600;
+          color: #333;
+          margin-right: 15px;
+        }
+
+        .filter-buttons-tab {
+          display: inline-flex;
+          gap: 8px;
+          flex-wrap: wrap;
+        }
+
+        .filter-btn {
+          padding: 6px 14px;
+          border: 1px solid #e2e8f0;
+          background: white;
+          border-radius: 20px;
+          cursor: pointer;
+          font-size: 13px;
+          transition: all 0.2s;
+        }
+
+        .filter-btn:hover {
+          border-color: #3b82f6;
+          color: #3b82f6;
+        }
+
+        .filter-btn.active {
+          background: #3b82f6;
+          color: white;
+          border-color: #3b82f6;
+        }
+
+        .custom-date-range-tab {
+          display: flex;
+          gap: 12px;
+          align-items: center;
+          margin-bottom: 15px;
+          padding: 10px 0;
+        }
+
+        .custom-date-range-tab input {
+          padding: 8px 12px;
+          border: 1px solid #e2e8f0;
+          border-radius: 8px;
+          font-size: 14px;
+        }
+
+        .search-export-tab {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          flex-wrap: wrap;
+          gap: 15px;
+          margin-top: 10px;
+        }
+
+        .search-wrapper-tab {
+          flex: 1;
+          position: relative;
+          max-width: 300px;
+        }
+
+        .search-wrapper-tab input {
+          width: 100%;
+          padding: 10px 15px 10px 38px;
+          border: 1px solid #e2e8f0;
+          border-radius: 10px;
+          font-size: 14px;
+        }
+
+        .search-icon-tab {
+          position: absolute;
+          left: 12px;
+          top: 50%;
+          transform: translateY(-50%);
+          font-size: 16px;
+        }
+
+        .export-buttons-tab {
+          display: flex;
+          gap: 10px;
+        }
+
+        .export-btn {
+          padding: 8px 16px;
+          border: none;
+          border-radius: 8px;
+          cursor: pointer;
+          font-weight: 500;
+          transition: all 0.2s;
+        }
+
+        .csv-btn {
+          background: #10b981;
+          color: white;
+        }
+
+        .csv-btn:hover {
+          background: #059669;
+        }
+
+        .print-btn {
+          background: #6366f1;
+          color: white;
+        }
+
+        .print-btn:hover {
+          background: #4f46e5;
+        }
+
+        /* Table Styles */
+        .table-responsive-tab {
+          overflow-x: auto;
+          border-radius: 16px;
+          background: white;
+        }
+
+        .purchase-table-tab {
+          width: 100%;
+          border-collapse: collapse;
+          font-size: 14px;
+        }
+
+        .purchase-table-tab th {
+          background: #f1f5f9;
+          padding: 14px 12px;
+          text-align: left;
+          font-weight: 600;
+          color: #1e293b;
+          border-bottom: 2px solid #e2e8f0;
+        }
+
+        .purchase-table-tab td {
+          padding: 12px;
+          border-bottom: 1px solid #e2e8f0;
+          vertical-align: middle;
+        }
+
+        .purchase-table-tab tr:hover {
+          background: #f8fafc;
+        }
+
+        .product-badge-table {
+          display: inline-block;
+          padding: 4px 10px;
+          border-radius: 12px;
+          font-size: 13px;
+          font-weight: 500;
+        }
+
+        .total-cell {
+          font-weight: 600;
+          color: #059669;
+        }
+
+        .stock-badge {
+          display: inline-block;
+          padding: 4px 10px;
+          border-radius: 20px;
+          font-size: 12px;
+          font-weight: 500;
+        }
+
+        .stock-badge.available {
+          background: #dbeafe;
+          color: #1e40af;
+        }
+
+        .stock-badge.low {
+          background: #fed7aa;
+          color: #9a3412;
+        }
+
+        .stock-badge.finished {
+          background: #dcfce7;
+          color: #166534;
+        }
+
+        .action-cell {
+          display: flex;
+          gap: 8px;
+        }
+
+        .edit-action-table, .delete-action-table {
+          background: none;
+          border: none;
+          cursor: pointer;
+          font-size: 18px;
+          padding: 4px 8px;
+          border-radius: 8px;
+          transition: all 0.2s;
+        }
+
+        .edit-action-table:hover {
+          background: #dbeafe;
+        }
+
+        .delete-action-table:hover {
+          background: #fee2e2;
+        }
+
+        .table-footer-total {
+          background: #f8fafc;
+          font-weight: 600;
+        }
+
+        .table-footer-total td {
+          border-top: 2px solid #e2e8f0;
+        }
+
+        @media (max-width: 768px) {
+          .filter-buttons-tab {
+            margin-top: 10px;
+          }
+          
+          .search-export-tab {
+            flex-direction: column;
+            align-items: stretch;
+          }
+          
+          .search-wrapper-tab {
+            max-width: 100%;
+          }
+          
+          .export-buttons-tab {
+            justify-content: flex-end;
+          }
+        }
+      `}</style>
     </div>
   );
 };

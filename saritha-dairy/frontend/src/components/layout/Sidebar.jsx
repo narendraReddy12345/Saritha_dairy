@@ -18,7 +18,7 @@ const Sidebar = ({ isOpen, onClose, isMobile, isTablet }) => {
     { icon: '👥', label: 'Customers', path: '/admin/customers', color: '#06b6d4' },
     { icon: '👨‍💼', label: 'Delivery Boys', path: '/delivery-boys', color: '#ef4444' },
     { icon: '📒', label: 'Credit', path: '/credit-management', color: '#f59e0b' },
-    { icon: '📊', label: 'Reports', path: '/reports', color: '#ec4899' },
+
     { icon: '🔔', label: 'Reminders', path: '/reminders', color: '#f97316' },
   ];
 
