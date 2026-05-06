@@ -57,72 +57,244 @@ const createAllTables = async () => {
       )
     `);
 
+    // Updated products table with product_type field
     await client.query(`
       CREATE TABLE IF NOT EXISTS products (
-        id SERIAL PRIMARY KEY, name VARCHAR(200) NOT NULL,
-        packs TEXT, image_url VARCHAR(500), created_at TIMESTAMP DEFAULT NOW()
+        id SERIAL PRIMARY KEY, 
+        name VARCHAR(200) NOT NULL,
+        packs TEXT, 
+        image_url VARCHAR(500), 
+        product_type VARCHAR(50) DEFAULT 'dairy',
+        is_non_dairy BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
       )
     `);
 
+    // Farm purchases (for raw dairy products)
     await client.query(`
       CREATE TABLE IF NOT EXISTS farm_purchases (
-        id SERIAL PRIMARY KEY, product_name VARCHAR(200) NOT NULL,
-        quantity DECIMAL(10,2) NOT NULL, unit VARCHAR(50),
-        price_per_unit DECIMAL(10,2), total_cost DECIMAL(10,2),
-        farm_name VARCHAR(200), invoice_number VARCHAR(100),
-        purchase_date DATE DEFAULT CURRENT_DATE, notes TEXT,
-        remaining_quantity DECIMAL(10,2), created_at TIMESTAMP DEFAULT NOW()
+        id SERIAL PRIMARY KEY, 
+        product_name VARCHAR(200) NOT NULL,
+        quantity DECIMAL(10,2) NOT NULL, 
+        unit VARCHAR(50),
+        price_per_unit DECIMAL(10,2), 
+        total_cost DECIMAL(10,2),
+        farm_name VARCHAR(200), 
+        invoice_number VARCHAR(100),
+        purchase_date DATE DEFAULT CURRENT_DATE, 
+        notes TEXT,
+        remaining_quantity DECIMAL(10,2), 
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
       )
+    `);
+
+    // NEW: Non-dairy purchases (for packed/finished goods)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS non_dairy_purchases (
+        id SERIAL PRIMARY KEY,
+        product_id INTEGER REFERENCES products(id) ON DELETE SET NULL,
+        product_name VARCHAR(200) NOT NULL,
+        pack_size VARCHAR(50),
+        pack_unit VARCHAR(20) DEFAULT 'piece',
+        quantity DECIMAL(10,2) NOT NULL,
+        price_per_unit DECIMAL(10,2) NOT NULL,
+        total_cost DECIMAL(10,2) NOT NULL,
+        supplier VARCHAR(200),
+        invoice_number VARCHAR(100),
+        purchase_date DATE DEFAULT CURRENT_DATE,
+        notes TEXT,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+
+    // Add index for better performance
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_non_dairy_purchases_date 
+      ON non_dairy_purchases(purchase_date)
+    `);
+    
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_non_dairy_purchases_product 
+      ON non_dairy_purchases(product_id)
     `);
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS packing_batches (
-        id SERIAL PRIMARY KEY, batch_number VARCHAR(100) NOT NULL,
-        product_name VARCHAR(200) NOT NULL, packed_date DATE DEFAULT CURRENT_DATE,
-        total_packets INTEGER DEFAULT 0, total_quantity DECIMAL(10,2) DEFAULT 0,
+        id SERIAL PRIMARY KEY, 
+        batch_number VARCHAR(100) NOT NULL,
+        product_name VARCHAR(200) NOT NULL, 
+        packed_date DATE DEFAULT CURRENT_DATE,
+        total_packets INTEGER DEFAULT 0, 
+        total_quantity DECIMAL(10,2) DEFAULT 0,
         created_at TIMESTAMP DEFAULT NOW()
       )
     `);
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS packing_items (
-        id SERIAL PRIMARY KEY, batch_id INTEGER REFERENCES packing_batches(id) ON DELETE CASCADE,
-        batch_number VARCHAR(100), pack_size_display VARCHAR(50),
-        packet_count INTEGER DEFAULT 0, selling_price DECIMAL(10,2),
+        id SERIAL PRIMARY KEY, 
+        batch_id INTEGER REFERENCES packing_batches(id) ON DELETE CASCADE,
+        batch_number VARCHAR(100), 
+        pack_size_display VARCHAR(50),
+        packet_count INTEGER DEFAULT 0, 
+        selling_price DECIMAL(10,2),
         purchase_id INTEGER REFERENCES farm_purchases(id)
       )
     `);
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS store_stock (
-        id SERIAL PRIMARY KEY, barcode VARCHAR(200), product_name VARCHAR(200),
-        pack_size_display VARCHAR(50), selling_price DECIMAL(10,2),
-        quantity INTEGER DEFAULT 0, unit VARCHAR(50), packed_date DATE,
-        purchase_id INTEGER REFERENCES farm_purchases(id), created_at TIMESTAMP DEFAULT NOW()
+        id SERIAL PRIMARY KEY, 
+        barcode VARCHAR(200), 
+        product_name VARCHAR(200),
+        pack_size_display VARCHAR(50), 
+        selling_price DECIMAL(10,2),
+        quantity INTEGER DEFAULT 0, 
+        unit VARCHAR(50), 
+        packed_date DATE,
+        product_type VARCHAR(50) DEFAULT 'dairy',
+        purchase_id INTEGER REFERENCES farm_purchases(id),
+        non_dairy_purchase_id INTEGER REFERENCES non_dairy_purchases(id),
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
       )
     `);
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS sales (
-        id SERIAL PRIMARY KEY, customer_name VARCHAR(200),
-        customer_phone VARCHAR(20), total_amount DECIMAL(10,2),
+        id SERIAL PRIMARY KEY, 
+        customer_name VARCHAR(200),
+        customer_phone VARCHAR(20), 
+        total_amount DECIMAL(10,2),
         sold_at TIMESTAMP DEFAULT NOW()
       )
     `);
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS sale_items (
-        id SERIAL PRIMARY KEY, sale_id INTEGER REFERENCES sales(id) ON DELETE CASCADE,
-        product_name VARCHAR(200), pack_size_display VARCHAR(50),
-        quantity INTEGER DEFAULT 1, price DECIMAL(10,2), total DECIMAL(10,2)
+        id SERIAL PRIMARY KEY, 
+        sale_id INTEGER REFERENCES sales(id) ON DELETE CASCADE,
+        product_name VARCHAR(200), 
+        pack_size_display VARCHAR(50),
+        quantity INTEGER DEFAULT 1, 
+        price DECIMAL(10,2), 
+        total DECIMAL(10,2),
+        product_type VARCHAR(50) DEFAULT 'dairy'
       )
     `);
 
+    // NEW: Stock movement log for tracking all inventory changes
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS stock_movements (
+        id SERIAL PRIMARY KEY,
+        product_name VARCHAR(200) NOT NULL,
+        product_type VARCHAR(50) NOT NULL,
+        movement_type VARCHAR(50) NOT NULL, -- 'purchase', 'sale', 'return', 'adjustment'
+        quantity DECIMAL(10,2) NOT NULL,
+        unit VARCHAR(50),
+        reference_id INTEGER, -- purchase_id, sale_id, etc.
+        reference_type VARCHAR(50),
+        previous_stock DECIMAL(10,2),
+        new_stock DECIMAL(10,2),
+        notes TEXT,
+        created_by VARCHAR(100),
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+
+    // Add indexes for stock movements
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_stock_movements_product 
+      ON stock_movements(product_name, product_type)
+    `);
+    
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_stock_movements_date 
+      ON stock_movements(created_at)
+    `);
+
+    // NEW: Suppliers table for better supplier management
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS suppliers (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(200) NOT NULL,
+        phone VARCHAR(20),
+        email VARCHAR(200),
+        address TEXT,
+        gst_number VARCHAR(50),
+        supplier_type VARCHAR(50) DEFAULT 'both', -- 'dairy', 'non-dairy', 'both'
+        is_active BOOLEAN DEFAULT TRUE,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+
+    // Add supplier_id to purchase tables
+    await client.query(`
+      ALTER TABLE farm_purchases 
+      ADD COLUMN IF NOT EXISTS supplier_id INTEGER REFERENCES suppliers(id) ON DELETE SET NULL
+    `);
+
+    await client.query(`
+      ALTER TABLE non_dairy_purchases 
+      ADD COLUMN IF NOT EXISTS supplier_id INTEGER REFERENCES suppliers(id) ON DELETE SET NULL
+    `);
+
+    // NEW: Non-dairy stock table for tracking individual product variants
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS non_dairy_stock (
+        id SERIAL PRIMARY KEY,
+        product_id INTEGER REFERENCES products(id) ON DELETE CASCADE,
+        product_name VARCHAR(200) NOT NULL,
+        pack_size VARCHAR(50),
+        pack_unit VARCHAR(20),
+        quantity INTEGER DEFAULT 0,
+        selling_price DECIMAL(10,2),
+        purchase_price DECIMAL(10,2),
+        last_purchase_id INTEGER REFERENCES non_dairy_purchases(id),
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW(),
+        UNIQUE(product_id, pack_size)
+      )
+    `);
+
+    // Create trigger to update updated_at timestamp
+    await client.query(`
+      CREATE OR REPLACE FUNCTION update_updated_at_column()
+      RETURNS TRIGGER AS $$
+      BEGIN
+        NEW.updated_at = NOW();
+        RETURN NEW;
+      END;
+      $$ language 'plpgsql';
+    `);
+
+    // Add triggers for tables with updated_at
+    const tablesWithUpdatedAt = ['products', 'farm_purchases', 'non_dairy_purchases', 'store_stock', 'suppliers', 'non_dairy_stock'];
+    
+    for (const table of tablesWithUpdatedAt) {
+      await client.query(`
+        DROP TRIGGER IF EXISTS update_${table}_updated_at ON ${table};
+        CREATE TRIGGER update_${table}_updated_at
+        BEFORE UPDATE ON ${table}
+        FOR EACH ROW
+        EXECUTE FUNCTION update_updated_at_column();
+      `);
+    }
+
     await client.query('COMMIT');
-    console.log('✅ All tables created');
+    console.log('✅ All tables created successfully');
+    console.log('📦 Non-dairy purchases table added');
+    console.log('📊 Stock movements logging enabled');
+    console.log('🏢 Suppliers table created');
+    
   } catch (error) {
     await client.query('ROLLBACK');
     console.error('❌ Error creating tables:', error);
+    throw error;
   } finally {
     client.release();
   }

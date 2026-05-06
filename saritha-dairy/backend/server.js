@@ -4,11 +4,12 @@ const fs = require('fs');
 require('dotenv').config();
 
 const app = express();
-
+const nonDairyPurchaseRoutes = require('./routes/nonDairyPurchaseRoutes');
 // Middleware
 app.use(cors());
 app.use(express.json());
 app.use('/uploads', express.static('uploads'));
+app.use('/api', nonDairyPurchaseRoutes);
 
 // Create uploads folder
 if (!fs.existsSync('./uploads')) fs.mkdirSync('./uploads');
