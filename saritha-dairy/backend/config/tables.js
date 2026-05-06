@@ -60,8 +60,20 @@ const createAllTables = async () => {
     await client.query(`
       CREATE TABLE IF NOT EXISTS products (
         id SERIAL PRIMARY KEY, name VARCHAR(200) NOT NULL,
-        packs TEXT, image_url VARCHAR(500), created_at TIMESTAMP DEFAULT NOW()
+        packs TEXT, image_url VARCHAR(500),
+        product_type VARCHAR(20) DEFAULT 'dairy',
+        is_non_dairy BOOLEAN DEFAULT false,
+        created_at TIMESTAMP DEFAULT NOW()
       )
+    `);
+
+    // ✅ Add missing columns to existing products table
+    await client.query(`
+      DO $$ 
+      BEGIN 
+        BEGIN ALTER TABLE products ADD COLUMN product_type VARCHAR(20) DEFAULT 'dairy'; EXCEPTION WHEN duplicate_column THEN NULL; END;
+        BEGIN ALTER TABLE products ADD COLUMN is_non_dairy BOOLEAN DEFAULT false; EXCEPTION WHEN duplicate_column THEN NULL; END;
+      END $$;
     `);
 
     await client.query(`
@@ -118,8 +130,32 @@ const createAllTables = async () => {
       )
     `);
 
+    // ✅ Customer preferences table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS customer_preferences (
+        id SERIAL PRIMARY KEY,
+        customer_id INTEGER UNIQUE REFERENCES customers(id) ON DELETE CASCADE,
+        want_milk BOOLEAN DEFAULT true,
+        quantity INTEGER DEFAULT 2,
+        pack_size VARCHAR(20) DEFAULT '500ml',
+        skip_days TEXT DEFAULT '[]',
+        extra_orders TEXT DEFAULT '[]',
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+
+    // ✅ Add missing columns to customer_preferences
+    await client.query(`
+      DO $$ 
+      BEGIN 
+        BEGIN ALTER TABLE customer_preferences ADD COLUMN skip_days TEXT DEFAULT '[]'; EXCEPTION WHEN duplicate_column THEN NULL; END;
+        BEGIN ALTER TABLE customer_preferences ADD COLUMN extra_orders TEXT DEFAULT '[]'; EXCEPTION WHEN duplicate_column THEN NULL; END;
+      END $$;
+    `);
+
     await client.query('COMMIT');
-    console.log('✅ All tables created');
+    console.log('✅ All tables created and updated');
   } catch (error) {
     await client.query('ROLLBACK');
     console.error('❌ Error creating tables:', error);
