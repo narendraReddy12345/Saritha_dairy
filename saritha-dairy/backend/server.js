@@ -11,19 +11,25 @@ require('dotenv').config();
 const app = express();
 
 // Import database modules
+const pool = require('./config/db');
 const createAllTables = require('./config/tables');
 
+// Middleware
 app.use(cors());
 app.use(express.json());
 app.use('/uploads', express.static('uploads'));
 
+// Create uploads folder
 if (!fs.existsSync('./uploads')) fs.mkdirSync('./uploads');
 
+// Start server function
 const startServer = async () => {
   try {
+    // Run database migration
     await createAllTables();
     console.log('✅ Database migration completed');
     
+    // Mount Routes
     app.use('/api/auth', require('./routes/auth'));
     app.use('/api/delivery-boys', require('./routes/deliveryBoys'));
     app.use('/api/admin', require('./routes/customers'));
@@ -40,15 +46,17 @@ const startServer = async () => {
     const { createTable } = require('./controllers/customerPreferences');
     createTable();
 
+    // Start server
     const PORT = process.env.PORT || 5000;
     app.listen(PORT, () => {
       console.log(`🚀 Server running on http://localhost:${PORT}`);
       console.log(`🕐 Server time (IST): ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}`);
     });
   } catch (error) {
-    console.error('❌ Database migration failed:', error);
+    console.error('❌ Failed to start server:', error.message);
     process.exit(1);
   }
 };
 
+// Start the server
 startServer();
