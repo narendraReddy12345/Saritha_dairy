@@ -1,242 +1,221 @@
-// controllers/deliveryBoyController.js
+// controllers/deliveryController.js - COMPLETE FILE WITH DELETE + STOCK REDUCTION
 const pool = require('../config/db');
 
-exports.getAll = async (req, res) => {
-  try {
-    const result = await pool.query(`
-      SELECT db.*,
-        (SELECT COUNT(*) FROM customer_delivery_assignments WHERE delivery_boy_id = db.id) as customer_count,
-        (SELECT COUNT(*) FROM daily_delivery WHERE delivery_boy_id = db.id AND delivery_date = CURRENT_DATE) as today_deliveries
-      FROM delivery_boys db ORDER BY db.created_at DESC
-    `);
-    res.json({ success: true, data: result.rows });
-  } catch (error) {
-    console.error('Error getting delivery boys:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-};
-
-exports.create = async (req, res) => {
-  const { name, phone, password, email, vehicle, vehicleNo, area, address, salary, shift } = req.body;
+// ✅ Record a delivery AND reduce stock from store_stock
+exports.record = async (req, res) => {
+  const { customer_id, delivery_boy_id, products, status, total_amount } = req.body;
   
-  console.log('📝 Creating delivery boy:', { name, phone });
+  console.log('📝 RECORDING DELIVERY');
+  console.log('Customer ID:', customer_id);
+  console.log('Products:', JSON.stringify(products));
   
-  try {
-    if (!name || !phone || !password) {
-      return res.status(400).json({ success: false, error: 'Name, phone, and password are required' });
-    }
-    
-    const existing = await pool.query('SELECT id FROM delivery_boys WHERE phone = $1', [phone]);
-    if (existing.rows.length > 0) {
-      return res.status(400).json({ success: false, error: 'Phone number already registered' });
-    }
-    
-    const result = await pool.query(
-      `INSERT INTO delivery_boys (name, phone, password, email, vehicle, vehicle_no, area, address, salary, shift)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
-      [name, phone, password, email || null, vehicle || null, vehicleNo || null, area || null, address || null, salary ? parseFloat(salary) : null, shift || 'morning']
-    );
-    
-    console.log('✅ Delivery boy created:', result.rows[0].id);
-    res.json({ success: true, data: result.rows[0], message: `${name} added successfully` });
-  } catch (error) {
-    console.error('❌ Error creating delivery boy:', error);
-    res.status(500).json({ success: false, error: error.message || 'Failed to create delivery boy' });
-  }
-};
-
-exports.update = async (req, res) => {
-  const { id } = req.params;
-  const { name, phone, password, email, vehicle, vehicleNo, area, address, salary, shift } = req.body;
-  
-  try {
-    let query, params;
-    if (password) {
-      query = `UPDATE delivery_boys SET name=$1, phone=$2, password=$3, email=$4, vehicle=$5, vehicle_no=$6, area=$7, address=$8, salary=$9, shift=$10, updated_at=NOW() WHERE id=$11 RETURNING *`;
-      params = [name, phone, password, email, vehicle, vehicleNo, area, address, salary ? parseFloat(salary) : null, shift, id];
-    } else {
-      query = `UPDATE delivery_boys SET name=$1, phone=$2, email=$3, vehicle=$4, vehicle_no=$5, area=$6, address=$7, salary=$8, shift=$9, updated_at=NOW() WHERE id=$10 RETURNING *`;
-      params = [name, phone, email, vehicle, vehicleNo, area, address, salary ? parseFloat(salary) : null, shift, id];
-    }
-    
-    const result = await pool.query(query, params);
-    if (result.rows.length === 0) {
-      return res.status(404).json({ success: false, error: 'Delivery boy not found' });
-    }
-    
-    res.json({ success: true, data: result.rows[0], message: 'Updated' });
-  } catch (error) {
-    console.error('❌ Error updating delivery boy:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-};
-
-exports.remove = async (req, res) => {
-  const { id } = req.params;
-  const client = await pool.connect();
-  
-  try {
-    await client.query('BEGIN');
-    
-    console.log(`🗑️ Starting deletion of delivery boy ID: ${id}`);
-    
-    const dailyDelResult = await client.query(
-      'DELETE FROM daily_delivery WHERE delivery_boy_id = $1 RETURNING id',
-      [id]
-    );
-    console.log(`   ✅ Deleted ${dailyDelResult.rows.length} daily delivery records`);
-    
-    const assignResult = await client.query(
-      'DELETE FROM customer_delivery_assignments WHERE delivery_boy_id = $1 RETURNING id',
-      [id]
-    );
-    console.log(`   ✅ Deleted ${assignResult.rows.length} customer assignments`);
-    
-    const boyResult = await client.query(
-      'DELETE FROM delivery_boys WHERE id = $1 RETURNING id, name',
-      [id]
-    );
-    
-    if (boyResult.rows.length === 0) {
-      await client.query('ROLLBACK');
-      return res.status(404).json({ success: false, error: 'Delivery boy not found' });
-    }
-    
-    console.log(`   ✅ Deleted delivery boy: ${boyResult.rows[0].name}`);
-    
-    await client.query('COMMIT');
-    
-    res.json({ 
-      success: true, 
-      message: `"${boyResult.rows[0].name}" deleted successfully`,
-      deleted: {
-        name: boyResult.rows[0].name,
-        dailyDeliveries: dailyDelResult.rows.length,
-        assignments: assignResult.rows.length
-      }
+  if (!customer_id || !delivery_boy_id || !products || products.length === 0) {
+    return res.status(400).json({ 
+      success: false, 
+      error: 'Missing required fields: customer_id, delivery_boy_id, products' 
     });
-    
-  } catch (error) {
-    await client.query('ROLLBACK');
-    console.error('❌ Error deleting delivery boy:', error.message);
-    res.status(500).json({ success: false, error: error.message });
-  } finally {
-    client.release();
   }
-};
-
-exports.toggleStatus = async (req, res) => {
-  try {
-    const result = await pool.query(
-      `UPDATE delivery_boys SET status = CASE WHEN status = 'active' THEN 'inactive' ELSE 'active' END, updated_at = NOW() WHERE id = $1 RETURNING *`,
-      [req.params.id]
-    );
-    if (result.rows.length === 0) {
-      return res.status(404).json({ success: false, error: 'Delivery boy not found' });
-    }
-    res.json({ success: true, data: result.rows[0] });
-  } catch (error) {
-    console.error('Error toggling status:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-};
-
-exports.assignCustomers = async (req, res) => {
-  const { id } = req.params;
-  const { customerIds } = req.body;
+  
   const client = await pool.connect();
   
   try {
     await client.query('BEGIN');
-    await client.query('DELETE FROM customer_delivery_assignments WHERE delivery_boy_id = $1', [id]);
     
-    if (customerIds && customerIds.length > 0) {
-      for (const cid of customerIds) {
-        await client.query(
-          'INSERT INTO customer_delivery_assignments (customer_id, delivery_boy_id) VALUES ($1, $2) ON CONFLICT (customer_id) DO UPDATE SET delivery_boy_id = $2',
-          [cid, id]
+    for (const product of products) {
+      const packSize = product.pack_size || '';
+      
+      // STEP 1: Insert into daily_delivery
+      const deliveryResult = await client.query(
+        `INSERT INTO daily_delivery 
+         (customer_id, delivery_boy_id, delivery_date, product_name, pack_size, quantity, price, total_amount, status)
+         VALUES ($1, $2, CURRENT_DATE, $3, $4, $5, $6, $7, $8)
+         RETURNING id`,
+        [customer_id, delivery_boy_id, product.product_name, packSize,
+         product.quantity, product.price, total_amount, status || 'delivered']
+      );
+      console.log(`✅ Inserted delivery ID: ${deliveryResult.rows[0].id}`);
+
+      // STEP 2: Reduce stock - try exact match first
+      let stockResult = await client.query(
+        `UPDATE store_stock SET quantity = quantity - $1 
+         WHERE product_name = $2 AND pack_size_display = $3 AND quantity >= $1
+         RETURNING id, quantity, product_name, pack_size_display`,
+        [product.quantity, product.product_name, packSize]
+      );
+      
+      // Fallback: case-insensitive match
+      if (stockResult.rows.length === 0 && packSize) {
+        stockResult = await client.query(
+          `UPDATE store_stock SET quantity = quantity - $1 
+           WHERE LOWER(product_name) = LOWER($2) 
+           AND LOWER(REPLACE(pack_size_display, ' ', '')) = LOWER(REPLACE($3, ' ', ''))
+           AND quantity >= $1
+           RETURNING id, quantity, product_name, pack_size_display`,
+          [product.quantity, product.product_name, packSize]
         );
       }
+      
+      // Fallback: any pack size for this product
+      if (stockResult.rows.length === 0) {
+        stockResult = await client.query(
+          `UPDATE store_stock SET quantity = quantity - $1 
+           WHERE LOWER(product_name) LIKE LOWER($2) AND quantity >= $1
+           RETURNING id, quantity, product_name, pack_size_display`,
+          [product.quantity, `%${product.product_name}%`]
+        );
+      }
+      
+      if (stockResult.rows.length > 0) {
+        console.log(`📊 Stock reduced: ${stockResult.rows[0].quantity} remaining`);
+      } else {
+        console.log(`⚠️ Could NOT reduce stock for "${product.product_name}"`);
+      }
     }
     
+    // Clean up zero quantity items
+    await client.query('DELETE FROM store_stock WHERE quantity <= 0');
+    
     await client.query('COMMIT');
-    res.json({ success: true, message: `${customerIds?.length || 0} customers assigned` });
+    console.log('✅ All deliveries recorded successfully');
+    
+    res.json({ success: true, message: 'Delivery recorded successfully' });
+    
   } catch (error) {
     await client.query('ROLLBACK');
-    console.error('Error assigning:', error);
+    console.error('❌ Error:', error.message);
     res.status(500).json({ success: false, error: error.message });
   } finally {
     client.release();
   }
 };
 
-// ✅ UPDATED: Get assigned customers with delivery status
-exports.getAssignedCustomers = async (req, res) => {
-  const { id } = req.params;
+// ✅ Get today's deliveries for a specific delivery boy
+exports.getToday = async (req, res) => {
+  const { boyId } = req.params;
   
-  console.log('📡 Fetching assigned customers for delivery boy ID:', id);
-  
-  try {
-    const result = await pool.query(`
-      SELECT 
-        c.*,
-        COALESCE(
-          (SELECT json_agg(json_build_object(
-            'product_name', cp.product_name,
-            'pack_size', cp.pack_size,
-            'quantity', cp.quantity_per_day,
-            'quantity_per_day', cp.quantity_per_day,
-            'price', cp.price
-          ))
-          FROM customer_products cp WHERE cp.customer_id = c.id),
-          '[]'::json
-        ) as products,
-        -- ✅ Check if delivered today using daily_delivery table
-        COALESCE(
-          (SELECT dd.status = 'delivered' 
-           FROM daily_delivery dd 
-           WHERE dd.customer_id = c.id 
-           AND dd.delivery_boy_id = $1 
-           AND DATE(dd.delivery_date) = CURRENT_DATE
-           LIMIT 1),
-          false
-        ) as delivered
-      FROM customers c
-      JOIN customer_delivery_assignments cda ON c.id = cda.customer_id
-      WHERE cda.delivery_boy_id = $1 
-      ORDER BY c.name
-    `, [id]);
-    
-    console.log(`✅ Found ${result.rows.length} assigned customers with delivery status`);
-    
-    res.json({ success: true, data: result.rows });
-  } catch (error) {
-    console.error('❌ Error getting assigned customers:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-};
-
-// ✅ NEW: Get today's deliveries summary for a delivery boy
-exports.getTodayDeliveries = async (req, res) => {
-  const { id } = req.params;
+  console.log('📡 GET TODAY DELIVERIES - Boy ID:', boyId);
   
   try {
     const result = await pool.query(`
-      SELECT 
-        dd.*,
-        c.name as customer_name,
-        c.phone,
-        c.apartment,
-        c.flat_no
+      SELECT dd.*, c.name as customer_name, c.phone, c.area, c.apartment, c.flat_no
       FROM daily_delivery dd
       JOIN customers c ON dd.customer_id = c.id
       WHERE dd.delivery_boy_id = $1 AND DATE(dd.delivery_date) = CURRENT_DATE
       ORDER BY dd.created_at DESC
-    `, [id]);
+    `, [boyId]);
     
+    console.log(`✅ Found ${result.rows.length} today deliveries`);
     res.json({ success: true, data: result.rows });
   } catch (error) {
-    console.error('Error getting today deliveries:', error);
+    console.error('❌ Error in getToday:', error.message);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+// ✅ Get ALL deliveries (for admin history page)
+exports.getAll = async (req, res) => {
+  console.log('📡 Fetching ALL deliveries...');
+  try {
+    const result = await pool.query(`
+      SELECT 
+        dd.*,
+        c.name as customer_name, c.phone as customer_phone,
+        c.apartment, c.area, c.flat_no, c.city, c.landmark,
+        db.name as delivery_boy_name, db.phone as delivery_boy_phone, db.vehicle as delivery_boy_vehicle
+      FROM daily_delivery dd
+      LEFT JOIN customers c ON dd.customer_id = c.id
+      LEFT JOIN delivery_boys db ON dd.delivery_boy_id = db.id
+      ORDER BY dd.delivery_date DESC, dd.created_at DESC
+    `);
+    
+    console.log(`✅ Found ${result.rows.length} total deliveries`);
+    res.json({ success: true, data: result.rows });
+  } catch (error) {
+    console.error('❌ Error in getAll:', error.message);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+// ✅ DELETE single delivery record
+exports.remove = async (req, res) => {
+  const { id } = req.params;
+  
+  console.log('🗑️ Deleting delivery ID:', id);
+  
+  try {
+    // Get delivery details before deleting (to restore stock if needed)
+    const delivery = await pool.query(
+      'SELECT * FROM daily_delivery WHERE id = $1',
+      [id]
+    );
+    
+    if (delivery.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Delivery record not found' });
+    }
+    
+    const d = delivery.rows[0];
+    
+    // Optional: Restore stock back to store_stock
+    if (d.product_name && d.quantity) {
+      await pool.query(
+        `UPDATE store_stock SET quantity = quantity + $1 
+         WHERE LOWER(product_name) LIKE LOWER($2)`,
+        [d.quantity, `%${d.product_name}%`]
+      );
+      console.log(`📦 Stock restored: ${d.product_name} +${d.quantity}`);
+    }
+    
+    // Delete the delivery record
+    await pool.query('DELETE FROM daily_delivery WHERE id = $1', [id]);
+    
+    console.log('✅ Delivery deleted:', d.customer_name || 'Unknown');
+    res.json({ success: true, message: 'Delivery record deleted!' });
+  } catch (error) {
+    console.error('❌ Error deleting delivery:', error.message);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+// ✅ BULK DELETE delivery records
+exports.bulkRemove = async (req, res) => {
+  const { ids } = req.body;
+  
+  if (!ids || !Array.isArray(ids) || ids.length === 0) {
+    return res.status(400).json({ success: false, error: 'No IDs provided' });
+  }
+  
+  console.log(`🗑️ Bulk deleting ${ids.length} deliveries`);
+  
+  try {
+    // Restore stock for all deleted deliveries
+    const deliveries = await pool.query(
+      'SELECT product_name, quantity FROM daily_delivery WHERE id = ANY($1)',
+      [ids]
+    );
+    
+    for (const d of deliveries.rows) {
+      if (d.product_name && d.quantity) {
+        await pool.query(
+          `UPDATE store_stock SET quantity = quantity + $1 
+           WHERE LOWER(product_name) LIKE LOWER($2)`,
+          [d.quantity, `%${d.product_name}%`]
+        );
+      }
+    }
+    
+    const result = await pool.query(
+      'DELETE FROM daily_delivery WHERE id = ANY($1) RETURNING id',
+      [ids]
+    );
+    
+    console.log(`✅ Deleted ${result.rows.length} records`);
+    res.json({ 
+      success: true, 
+      deleted: result.rows.length,
+      message: `${result.rows.length} records deleted!` 
+    });
+  } catch (error) {
+    console.error('❌ Error in bulk delete:', error.message);
     res.status(500).json({ success: false, error: error.message });
   }
 };
