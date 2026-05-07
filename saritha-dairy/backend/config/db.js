@@ -13,9 +13,12 @@ const pool = new Pool({
   } : false
 });
 
-// Set timezone on connection
+// Set timezone on every connection
 pool.on('connect', async (client) => {
   await client.query("SET TIME ZONE 'Asia/Kolkata'");
+  // Verify timezone is set
+  const result = await client.query("SELECT NOW() as current_time");
+  console.log('✅ DB timezone set, current DB time:', result.rows[0].current_time);
 });
 
 pool.connect((err) => {
@@ -26,15 +29,20 @@ pool.connect((err) => {
   }
 });
 
-// Helper to get IST date
+// ✅ FIXED: Helper to get IST date as YYYY-MM-DD
 const getISTDate = () => {
+  // Use current date from server which is already in IST
   const now = new Date();
-  const istOffset = 5.5 * 60 * 60 * 1000;
-  const istTime = new Date(now.getTime() + istOffset);
-  const year = istTime.getUTCFullYear();
-  const month = String(istTime.getUTCMonth() + 1).padStart(2, '0');
-  const day = String(istTime.getUTCDate()).padStart(2, '0');
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
+};
+
+// ✅ Get current IST datetime
+const getISTDateTime = () => {
+  const now = new Date();
+  return now.toISOString().slice(0, 19).replace('T', ' ');
 };
 
 const createAllTables = async () => {
@@ -42,8 +50,18 @@ const createAllTables = async () => {
   try {
     await client.query('BEGIN');
     
-    // Set timezone
+    // Set timezone for this session
     await client.query("SET TIME ZONE 'Asia/Kolkata'");
+    
+    // ✅ Create a function to get IST date in PostgreSQL
+    await client.query(`
+      CREATE OR REPLACE FUNCTION get_ist_date()
+      RETURNS DATE AS $$
+      BEGIN
+        RETURN (NOW() AT TIME ZONE 'Asia/Kolkata')::DATE;
+      END;
+      $$ LANGUAGE plpgsql;
+    `);
 
     await client.query(`CREATE TABLE IF NOT EXISTS delivery_boys (
       id SERIAL PRIMARY KEY, 
@@ -100,12 +118,12 @@ const createAllTables = async () => {
       UNIQUE(customer_id)
     )`);
     
-    // ✅ Updated daily_delivery table with proper structure
+    // ✅ Updated daily_delivery table - use get_ist_date() for default
     await client.query(`CREATE TABLE IF NOT EXISTS daily_delivery (
       id SERIAL PRIMARY KEY, 
       customer_id INTEGER REFERENCES customers(id) ON DELETE CASCADE,
       delivery_boy_id INTEGER REFERENCES delivery_boys(id),
-      delivery_date DATE DEFAULT CURRENT_DATE,
+      delivery_date DATE DEFAULT get_ist_date(),
       product_name VARCHAR(100), 
       pack_size VARCHAR(50),
       quantity INTEGER DEFAULT 1, 
