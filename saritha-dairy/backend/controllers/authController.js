@@ -4,13 +4,8 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const { JWT_SECRET, ADMIN_EMAILS, ADMIN_PHONES } = require('../middleware/auth');
 
-// Multiple admin phone numbers (can also come from env)
-const ADMIN_PHONE_LIST = process.env.ADMIN_PHONES 
-  ? process.env.ADMIN_PHONES.split(',').map(p => p.trim())
-  : ['9347745435', '9398263810', '9666966811'];
-
 console.log('👑 Admin Emails configured:', ADMIN_EMAILS);
-console.log('📱 Admin Phone Numbers configured:', ADMIN_PHONE_LIST);
+console.log('📱 Admin Phone Numbers configured:', ADMIN_PHONES);
 
 // ✅ ADMIN LOGIN WITH EMAIL
 exports.adminLogin = async (req, res) => {
@@ -19,7 +14,7 @@ exports.adminLogin = async (req, res) => {
   console.log('🔐 Admin login attempt (email):', email);
   
   try {
-    if (!ADMIN_EMAILS.includes(email?.toLowerCase().trim())) {
+    if (!ADMIN_EMAILS || !ADMIN_EMAILS.includes(email?.toLowerCase().trim())) {
       console.log('❌ Email not authorized');
       return res.status(401).json({ success: false, error: 'Not authorized as admin' });
     }
@@ -50,7 +45,7 @@ exports.adminLogin = async (req, res) => {
   }
 };
 
-// ✅ ADMIN LOGIN WITH PHONE (Supporting multiple admins)
+// ✅ ADMIN LOGIN WITH PHONE (Single function - no duplicates)
 exports.adminLoginPhone = async (req, res) => {
   const { phone, password } = req.body;
   
@@ -58,9 +53,9 @@ exports.adminLoginPhone = async (req, res) => {
   
   try {
     // Check if phone number is in the admin list
-    if (!ADMIN_PHONE_LIST.includes(phone)) {
+    if (!ADMIN_PHONES || !ADMIN_PHONES.includes(phone)) {
       console.log('❌ Phone not authorized - Not in admin list');
-      console.log('📱 Authorized phones:', ADMIN_PHONE_LIST);
+      console.log('📱 Authorized phones:', ADMIN_PHONES);
       return res.status(401).json({ 
         success: false, 
         error: 'Not authorized as admin. Phone number not recognized.' 
@@ -77,18 +72,18 @@ exports.adminLoginPhone = async (req, res) => {
       });
     }
     
-    // Optional: Find admin name from database or use a default
+    // Optional: Try to find admin in database to get name
     let adminName = 'Admin';
     let adminEmail = '';
     
     try {
-      // Try to find admin in database
+      // Check if users table exists and try to find admin
       const result = await pool.query(
         'SELECT name, email FROM users WHERE phone = $1 AND role = $2',
         [phone, 'admin']
       );
       
-      if (result.rows.length > 0) {
+      if (result.rows && result.rows.length > 0) {
         adminName = result.rows[0].name;
         adminEmail = result.rows[0].email || '';
         console.log('📝 Found admin in DB:', adminName);
@@ -98,7 +93,13 @@ exports.adminLoginPhone = async (req, res) => {
     }
     
     const token = jwt.sign(
-      { id: 0, phone, role: 'admin', name: adminName, email: adminEmail },
+      { 
+        id: 0, 
+        phone, 
+        role: 'admin', 
+        name: adminName, 
+        email: adminEmail 
+      },
       JWT_SECRET,
       { expiresIn: '24h' }
     );
@@ -320,9 +321,6 @@ exports.addAdmin = async (req, res) => {
     
     const newAdmin = result.rows[0];
     console.log('✅ New admin added:', newAdmin);
-    
-    // Optional: Also add to environment variable list
-    // This could be handled by updating .env file or database
     
     res.json({
       success: true,
