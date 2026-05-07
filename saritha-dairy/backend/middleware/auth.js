@@ -1,57 +1,79 @@
-// middleware/auth.js
-const jwt = require('jsonwebtoken');
-const JWT_SECRET = process.env.JWT_SECRET || 'saritha_dairy_secret_key_2024';
-const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || 'narendrareddybadam553@gmail.com').split(',').map(e => e.trim().toLowerCase());
-
-const verifyToken = (req, res, next) => {
-  const token = req.headers.authorization?.split(' ')[1];
+// controllers/authController.js (Updated adminLoginPhone function)
+exports.adminLoginPhone = async (req, res) => {
+  const { phone, password } = req.body;
   
-  console.log('🔑 Verifying token:', token ? 'Present' : 'Missing');
+  console.log('👑 Admin login attempt (phone):', phone);
   
-  if (!token) {
-    return res.status(401).json({ success: false, error: 'No token provided' });
-  }
+  // Import ADMIN_PHONES from middleware
+  const { ADMIN_PHONES } = require('../middleware/auth');
   
   try {
-    req.user = jwt.verify(token, JWT_SECRET);
-    console.log('✅ Token verified:', req.user.role, req.user.name, 'ID:', req.user.id);
-    next();
-  } catch (error) {
-    console.log('❌ Token invalid:', error.message);
-    res.status(401).json({ success: false, error: 'Invalid token' });
-  }
-};
-
-const isAdmin = (req, res, next) => {
-  console.log('👑 Checking admin role:', req.user?.role);
-  if (req.user?.role !== 'admin') {
-    return res.status(403).json({ success: false, error: 'Admin access required' });
-  }
-  next();
-};
-
-// ✅ New middleware: Allow if admin OR if it's the delivery boy's own data
-const isAdminOrSelf = (req, res, next) => {
-  // Admin can access anything
-  if (req.user?.role === 'admin') {
-    return next();
-  }
-  
-  // Delivery boy can access their own data
-  if (req.user?.role === 'delivery') {
-    const requestedId = parseInt(req.params.id);
-    const userId = req.user.id;
-    
-    console.log(`🔍 Self-check: requested=${requestedId}, user=${userId}`);
-    
-    if (requestedId === userId) {
-      return next();
+    // Check if phone number is in the admin list
+    if (!ADMIN_PHONES.includes(phone)) {
+      console.log('❌ Phone not authorized - Not in admin list');
+      console.log('📱 Authorized phones:', ADMIN_PHONES);
+      return res.status(401).json({ 
+        success: false, 
+        error: 'Not authorized as admin. Phone number not recognized.' 
+      });
     }
     
-    return res.status(403).json({ success: false, error: 'You can only access your own data' });
+    const adminPassword = process.env.ADMIN_PASSWORD || 'admin123';
+    
+    if (password !== adminPassword) {
+      console.log('❌ Wrong password for admin phone:', phone);
+      return res.status(401).json({ 
+        success: false, 
+        error: 'Invalid admin password' 
+      });
+    }
+    
+    // Optional: Try to find admin in database to get name
+    let adminName = 'Admin';
+    let adminEmail = '';
+    
+    try {
+      const result = await pool.query(
+        'SELECT name, email FROM users WHERE phone = $1 AND role = $2',
+        [phone, 'admin']
+      );
+      
+      if (result.rows.length > 0) {
+        adminName = result.rows[0].name;
+        adminEmail = result.rows[0].email || '';
+        console.log('📝 Found admin in DB:', adminName);
+      }
+    } catch (dbError) {
+      console.log('⚠️ Could not fetch admin from DB, using defaults');
+    }
+    
+    const token = jwt.sign(
+      { 
+        id: 0, 
+        phone, 
+        role: 'admin', 
+        name: adminName, 
+        email: adminEmail 
+      },
+      JWT_SECRET,
+      { expiresIn: '24h' }
+    );
+    
+    console.log('✅ Admin logged in via phone:', phone);
+    
+    res.json({
+      success: true,
+      token,
+      user: { 
+        id: 0, 
+        phone, 
+        name: adminName, 
+        email: adminEmail,
+        role: 'admin' 
+      }
+    });
+  } catch (error) {
+    console.error('❌ Admin phone login error:', error);
+    res.status(500).json({ success: false, error: error.message });
   }
-  
-  return res.status(403).json({ success: false, error: 'Access denied' });
 };
-
-module.exports = { verifyToken, isAdmin, isAdminOrSelf, JWT_SECRET, ADMIN_EMAILS };
