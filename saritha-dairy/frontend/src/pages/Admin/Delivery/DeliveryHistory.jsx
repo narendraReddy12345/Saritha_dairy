@@ -17,6 +17,32 @@ const DeliveryHistory = () => {
 
   const getToken = () => sessionStorage.getItem('authToken');
 
+  // ✅ Helper function to convert UTC date to IST date
+  const convertToISTDate = (utcDateStr) => {
+    if (!utcDateStr) return 'N/A';
+    const date = new Date(utcDateStr);
+    // Add 5 hours 30 minutes for IST
+    const istOffset = 5.5 * 60 * 60 * 1000;
+    const istDate = new Date(date.getTime() + istOffset);
+    return istDate.toISOString().split('T')[0];
+  };
+
+  // ✅ Helper to format datetime in IST
+  const formatISTDateTime = (utcDateStr) => {
+    if (!utcDateStr) return 'N/A';
+    const date = new Date(utcDateStr);
+    const istOffset = 5.5 * 60 * 60 * 1000;
+    const istDate = new Date(date.getTime() + istOffset);
+    return istDate.toLocaleString('en-IN', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
+    });
+  };
+
   useEffect(() => {
     loadData();
   }, []);
@@ -52,7 +78,6 @@ const DeliveryHistory = () => {
     setTimeout(() => setMessage(null), 3000);
   };
 
-  // ✅ DELETE delivery record
   const handleDelete = async (id, customerName) => {
     if (!window.confirm(`⚠️ Delete delivery record for "${customerName}"?\n\nThis will remove the delivery from history.`)) {
       return;
@@ -70,7 +95,6 @@ const DeliveryHistory = () => {
       
       if (result.success) {
         showMessage('success', '🗑️ Delivery record deleted!');
-        // Remove from local state
         setDeliveries(prev => prev.filter(d => d.id !== id));
       } else {
         showMessage('error', result.error || 'Failed to delete');
@@ -81,7 +105,6 @@ const DeliveryHistory = () => {
     setDeletingId(null);
   };
 
-  // ✅ Delete ALL filtered deliveries
   const handleDeleteAll = async () => {
     const count = filteredDeliveries.length;
     if (count === 0) {
@@ -93,7 +116,9 @@ const DeliveryHistory = () => {
       return;
     }
     
-    if (!window.confirm(`Type "DELETE" to confirm deleting ${count} records.`)) {
+    const confirmText = prompt(`Type "DELETE" to confirm deleting ${count} records.`);
+    if (confirmText !== 'DELETE') {
+      showMessage('error', 'Deletion cancelled');
       return;
     }
     
@@ -115,7 +140,7 @@ const DeliveryHistory = () => {
       
       if (result.success) {
         showMessage('success', `🗑️ ${result.deleted || ids.length} records deleted!`);
-        loadData(); // Reload all data
+        loadData();
       } else {
         showMessage('error', result.error || 'Failed to delete');
       }
@@ -125,25 +150,52 @@ const DeliveryHistory = () => {
     setDeletingId(null);
   };
 
+  // ✅ Get current IST date for filtering
+  const getISTToday = () => {
+    const now = new Date();
+    const istOffset = 5.5 * 60 * 60 * 1000;
+    const istDate = new Date(now.getTime() + istOffset);
+    return istDate.toISOString().split('T')[0];
+  };
+
+  const getISTDateFromUTC = (utcDateStr) => {
+    if (!utcDateStr) return '';
+    const date = new Date(utcDateStr);
+    const istOffset = 5.5 * 60 * 60 * 1000;
+    const istDate = new Date(date.getTime() + istOffset);
+    return istDate.toISOString().split('T')[0];
+  };
+
   const getFilteredDeliveries = () => {
     let filtered = [...deliveries];
-    const today = new Date().toISOString().split('T')[0];
+    const istToday = getISTToday();
     
     if (dateRange === 'today') {
-      filtered = filtered.filter(d => d.delivery_date?.startsWith(today));
+      filtered = filtered.filter(d => getISTDateFromUTC(d.delivery_date) === istToday);
     } else if (dateRange === 'yesterday') {
       const yesterday = new Date();
       yesterday.setDate(yesterday.getDate() - 1);
-      const yesterdayStr = yesterday.toISOString().split('T')[0];
-      filtered = filtered.filter(d => d.delivery_date?.startsWith(yesterdayStr));
+      const istOffset = 5.5 * 60 * 60 * 1000;
+      const istYesterday = new Date(yesterday.getTime() + istOffset).toISOString().split('T')[0];
+      filtered = filtered.filter(d => getISTDateFromUTC(d.delivery_date) === istYesterday);
     } else if (dateRange === 'week') {
       const weekAgo = new Date();
       weekAgo.setDate(weekAgo.getDate() - 7);
-      filtered = filtered.filter(d => new Date(d.delivery_date) >= weekAgo);
+      const istOffset = 5.5 * 60 * 60 * 1000;
+      const istWeekAgo = new Date(weekAgo.getTime() + istOffset);
+      filtered = filtered.filter(d => {
+        const istDate = getISTDateFromUTC(d.delivery_date);
+        return new Date(istDate) >= istWeekAgo;
+      });
     } else if (dateRange === 'month') {
       const monthAgo = new Date();
       monthAgo.setMonth(monthAgo.getMonth() - 1);
-      filtered = filtered.filter(d => new Date(d.delivery_date) >= monthAgo);
+      const istOffset = 5.5 * 60 * 60 * 1000;
+      const istMonthAgo = new Date(monthAgo.getTime() + istOffset);
+      filtered = filtered.filter(d => {
+        const istDate = getISTDateFromUTC(d.delivery_date);
+        return new Date(istDate) >= istMonthAgo;
+      });
     }
 
     if (filterStatus !== 'all') {
@@ -170,14 +222,57 @@ const DeliveryHistory = () => {
 
   const filteredDeliveries = getFilteredDeliveries();
 
-  // Export functions (keep existing)
-  const exportToExcel = () => { /* ... keep existing ... */ };
-  const exportToCSV = () => { /* ... keep existing ... */ };
+  // Export functions
+  const exportToCSV = () => {
+    const headers = ['Date', 'Customer', 'Phone', 'Apartment', 'Flat', 'Product', 'Quantity', 'Amount', 'Delivery Boy', 'Status'];
+    const rows = filteredDeliveries.map(d => [
+      formatISTDateTime(d.delivery_date),
+      d.customer_name || 'N/A',
+      d.customer_phone || 'N/A',
+      d.apartment || 'N/A',
+      d.flat_no || 'N/A',
+      d.product_name || 'N/A',
+      d.quantity || 1,
+      d.total_amount || 0,
+      d.delivery_boy_name || 'N/A',
+      d.status || 'pending'
+    ]);
+
+    const csvContent = [headers, ...rows].map(row => row.join(',')).join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `delivery_history_${getISTToday()}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showMessage('success', '✅ CSV downloaded');
+  };
+
+  const exportToExcel = () => {
+    const wsData = filteredDeliveries.map(d => ({
+      'Date': formatISTDateTime(d.delivery_date),
+      'Customer': d.customer_name || 'N/A',
+      'Phone': d.customer_phone || 'N/A',
+      'Apartment': d.apartment || 'N/A',
+      'Flat': d.flat_no || 'N/A',
+      'Product': d.product_name || 'N/A',
+      'Quantity': d.quantity || 1,
+      'Amount': d.total_amount || 0,
+      'Delivery Boy': d.delivery_boy_name || 'N/A',
+      'Status': d.status || 'pending'
+    }));
+    const ws = XLSX.utils.json_to_sheet(wsData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Delivery History');
+    XLSX.writeFile(wb, `delivery_history_${getISTToday()}.xlsx`);
+    showMessage('success', '✅ Excel file downloaded');
+  };
 
   // Stats
   const totalAmount = filteredDeliveries.reduce((sum, d) => sum + (parseFloat(d.total_amount) || 0), 0);
-  const todayStr = new Date().toISOString().split('T')[0];
-  const todayDeliveries = deliveries.filter(d => d.delivery_date?.startsWith(todayStr));
+  const istToday = getISTToday();
+  const todayDeliveries = deliveries.filter(d => getISTDateFromUTC(d.delivery_date) === istToday);
   const todayDone = todayDeliveries.filter(d => d.status === 'delivered');
   const todayPending = todayDeliveries.filter(d => d.status === 'pending');
   const uniqueCustomers = [...new Set(filteredDeliveries.map(d => d.customer_id))].length;
@@ -221,7 +316,6 @@ const DeliveryHistory = () => {
             border: '1px solid rgba(255,255,255,0.3)', padding: '10px 16px',
             borderRadius: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '12px'
           }}>📥 Excel</button>
-          {/* ✅ Delete All Button */}
           {filteredDeliveries.length > 0 && (
             <button onClick={handleDeleteAll} disabled={deletingId === 'all'} style={{
               background: 'rgba(239, 68, 68, 0.3)', color: 'white',
@@ -278,7 +372,8 @@ const DeliveryHistory = () => {
         </div>
         <button onClick={loadData} style={{
           padding: '8px 14px', background: '#4caf50', color: 'white',
-          border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 600, fontSize: '12px' }}>🔄 Refresh</button>
+          border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 600, fontSize: '12px'
+        }}>🔄 Refresh</button>
       </div>
 
       {/* Table */}
@@ -296,7 +391,7 @@ const DeliveryHistory = () => {
           <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '950px' }}>
             <thead>
               <tr style={{ background: '#1a472a', color: 'white' }}>
-                <th style={thStyle}>Date</th>
+                <th style={thStyle}>Date (IST)</th>
                 <th style={thStyle}>Customer</th>
                 <th style={thStyle}>Apartment</th>
                 <th style={thStyle}>Flat</th>
@@ -304,17 +399,17 @@ const DeliveryHistory = () => {
                 <th style={thStyle}>Amount</th>
                 <th style={thStyle}>Delivery Boy</th>
                 <th style={{ ...thStyle, textAlign: 'center' }}>Status</th>
-                {/* ✅ Delete Column */}
                 <th style={{ ...thStyle, textAlign: 'center', width: '60px' }}>Action</th>
               </tr>
             </thead>
             <tbody>
               {filteredDeliveries.map((d, i) => (
                 <tr key={d.id} style={{ borderBottom: '1px solid #f0f0f0', background: i % 2 === 0 ? '#fafdfa' : 'white' }}>
+                  {/* ✅ Display IST date and time */}
                   <td style={tdStyle}>
-                    <strong>{d.delivery_date?.split('T')[0] || 'N/A'}</strong>
+                    <strong>{getISTDateFromUTC(d.delivery_date)}</strong>
                     <br /><small style={{ color: '#999', fontSize: '10px' }}>
-                      {d.created_at ? new Date(d.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+                      {d.created_at ? formatISTDateTime(d.created_at).split(',')[1] : ''}
                     </small>
                   </td>
                   <td style={tdStyle}>
@@ -350,7 +445,6 @@ const DeliveryHistory = () => {
                       {d.status === 'delivered' ? '✅ Done' : '⏳ Pending'}
                     </span>
                   </td>
-                  {/* ✅ Delete Button */}
                   <td style={{ ...tdStyle, textAlign: 'center' }}>
                     <button
                       onClick={() => handleDelete(d.id, d.customer_name)}
