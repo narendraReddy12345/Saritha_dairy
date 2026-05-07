@@ -2,10 +2,11 @@
 const express = require('express');
 const router = express.Router();
 const nonDairyItemsController = require('../controllers/nonDairyItemsController');
-const { auth } = require('../middleware/auth');
+const { verifyToken, isAdmin } = require('../middleware/auth');
 
-// All routes require authentication
-router.use(auth);
+// All routes require authentication (admin only for managing non-dairy items)
+router.use(verifyToken);
+router.use(isAdmin); // Only admin can manage non-dairy products
 
 // Product management
 router.get('/non-dairy-items', nonDairyItemsController.getAllItems);

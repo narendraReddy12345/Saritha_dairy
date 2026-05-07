@@ -4,9 +4,7 @@ const pool = require('../config/db');
 // Get all non-dairy items
 exports.getAllItems = async (req, res) => {
   try {
-    const result = await pool.query(
-      'SELECT * FROM non_dairy_items ORDER BY name'
-    );
+    const result = await pool.query('SELECT * FROM non_dairy_items ORDER BY name');
     res.json({ success: true, data: result.rows });
   } catch (error) {
     console.error('Error fetching non-dairy items:', error);
@@ -23,7 +21,6 @@ exports.addProduct = async (req, res) => {
   try {
     await client.query('BEGIN');
     
-    // Insert the product
     const productResult = await client.query(
       `INSERT INTO non_dairy_items 
        (name, pack_size, pack_unit, selling_price, purchase_price, quantity, supplier, notes) 
@@ -32,7 +29,6 @@ exports.addProduct = async (req, res) => {
       [name, packSize || '1', packUnit || 'piece', sellingPrice, purchasePrice, quantity, supplier, notes]
     );
     
-    // Record the initial purchase in history
     const totalCost = purchasePrice * quantity;
     await client.query(
       `INSERT INTO non_dairy_purchase_history 
@@ -63,11 +59,7 @@ exports.addStock = async (req, res) => {
   try {
     await client.query('BEGIN');
     
-    // Get current product
-    const product = await client.query(
-      'SELECT * FROM non_dairy_items WHERE id = $1',
-      [productId]
-    );
+    const product = await client.query('SELECT * FROM non_dairy_items WHERE id = $1', [productId]);
     
     if (product.rows.length === 0) {
       return res.status(404).json({ success: false, error: 'Product not found' });
@@ -81,7 +73,6 @@ exports.addStock = async (req, res) => {
     const totalValue = (currentProduct.purchase_price * currentProduct.quantity) + (purchasePrice * quantity);
     const newAvgPurchasePrice = totalValue / newQuantity;
     
-    // Update product quantity and purchase price
     await client.query(
       `UPDATE non_dairy_items 
        SET quantity = $1, purchase_price = $2, updated_at = NOW() 
@@ -89,7 +80,6 @@ exports.addStock = async (req, res) => {
       [newQuantity, newAvgPurchasePrice, productId]
     );
     
-    // Record purchase in history
     await client.query(
       `INSERT INTO non_dairy_purchase_history 
        (product_id, product_name, quantity, purchase_price, total_cost, supplier, invoice_number, transaction_type, notes) 
@@ -99,11 +89,7 @@ exports.addStock = async (req, res) => {
     
     await client.query('COMMIT');
     
-    // Get updated product
-    const updatedProduct = await pool.query(
-      'SELECT * FROM non_dairy_items WHERE id = $1',
-      [productId]
-    );
+    const updatedProduct = await pool.query('SELECT * FROM non_dairy_items WHERE id = $1', [productId]);
     
     console.log('✅ Stock added for:', currentProduct.name, '+', quantity);
     res.json({ success: true, data: updatedProduct.rows[0], message: `Added ${quantity} units to ${currentProduct.name}` });
@@ -155,20 +141,13 @@ exports.deleteProduct = async (req, res) => {
   try {
     await client.query('BEGIN');
     
-    // Get product name for logging
-    const product = await client.query(
-      'SELECT name FROM non_dairy_items WHERE id = $1',
-      [id]
-    );
+    const product = await client.query('SELECT name FROM non_dairy_items WHERE id = $1', [id]);
     
     if (product.rows.length === 0) {
       return res.status(404).json({ success: false, error: 'Product not found' });
     }
     
-    // Delete purchase history first (due to foreign key)
     await client.query('DELETE FROM non_dairy_purchase_history WHERE product_id = $1', [id]);
-    
-    // Delete product
     await client.query('DELETE FROM non_dairy_items WHERE id = $1', [id]);
     
     await client.query('COMMIT');
