@@ -4,21 +4,21 @@ const router = express.Router();
 const nonDairyItemsController = require('../controllers/nonDairyItemsController');
 const { verifyToken, isAdmin } = require('../middleware/auth');
 
-// All routes require authentication (admin only for managing non-dairy items)
+// All routes require authentication and admin access
 router.use(verifyToken);
-router.use(isAdmin); // Only admin can manage non-dairy products
+router.use(isAdmin);
 
-// Product management
+// Product routes with image upload
 router.get('/non-dairy-items', nonDairyItemsController.getAllItems);
-router.post('/non-dairy-items', nonDairyItemsController.addProduct);
+router.post('/non-dairy-items', nonDairyItemsController.uploadImage, nonDairyItemsController.addProduct);
 router.put('/non-dairy-items/:id', nonDairyItemsController.updateProduct);
 router.delete('/non-dairy-items/:id', nonDairyItemsController.deleteProduct);
 
-// Stock management
+// Stock purchase
 router.post('/non-dairy-items/purchase', nonDairyItemsController.addStock);
 
-// History/reports
-router.get('/non-dairy-purchase-history', nonDairyItemsController.getAllPurchaseHistory);
-router.get('/non-dairy-purchase-history/:productId', nonDairyItemsController.getPurchaseHistory);
+// History routes
+router.get('/non-dairy-purchase-history', nonDairyItemsController.getPurchaseHistory);
+router.delete('/non-dairy-purchase-history/:id', nonDairyItemsController.deletePurchaseRecord);
 
 module.exports = router;
