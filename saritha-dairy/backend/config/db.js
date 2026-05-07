@@ -13,13 +13,23 @@ const pool = new Pool({
   } : false
 });
 
-// Set timezone on every connection
+// ✅ Force timezone on every connection
 pool.on('connect', async (client) => {
   await client.query("SET TIME ZONE 'Asia/Kolkata'");
-  // Verify timezone is set
   const result = await client.query("SELECT NOW() as current_time");
   console.log('✅ DB timezone set, current DB time:', result.rows[0].current_time);
 });
+
+// ✅ Wrapper function to ensure timezone is set for queries
+const queryWithTimezone = async (text, params) => {
+  const client = await pool.connect();
+  try {
+    await client.query("SET TIME ZONE 'Asia/Kolkata'");
+    return await client.query(text, params);
+  } finally {
+    client.release();
+  }
+};
 
 pool.connect((err) => {
   if (err) {
@@ -29,20 +39,19 @@ pool.connect((err) => {
   }
 });
 
-// ✅ FIXED: Helper to get IST date as YYYY-MM-DD
+// ✅ Helper to get current IST date directly from database
+const getISTDateFromDB = async () => {
+  const result = await pool.query("SELECT (NOW() AT TIME ZONE 'Asia/Kolkata')::DATE as ist_date");
+  return result.rows[0].ist_date;
+};
+
+// ✅ Helper to get current IST date from server (fallback)
 const getISTDate = () => {
-  // Use current date from server which is already in IST
   const now = new Date();
   const year = now.getFullYear();
   const month = String(now.getMonth() + 1).padStart(2, '0');
   const day = String(now.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
-};
-
-// ✅ Get current IST datetime
-const getISTDateTime = () => {
-  const now = new Date();
-  return now.toISOString().slice(0, 19).replace('T', ' ');
 };
 
 const createAllTables = async () => {
@@ -60,6 +69,16 @@ const createAllTables = async () => {
       BEGIN
         RETURN (NOW() AT TIME ZONE 'Asia/Kolkata')::DATE;
       END;
+      $$ LANGUAGE plpgsql IMMUTABLE;
+    `);
+    
+    // ✅ Create a function to get IST timestamp
+    await client.query(`
+      CREATE OR REPLACE FUNCTION get_ist_timestamp()
+      RETURNS TIMESTAMP AS $$
+      BEGIN
+        RETURN NOW() AT TIME ZONE 'Asia/Kolkata';
+      END;
       $$ LANGUAGE plpgsql;
     `);
 
@@ -76,9 +95,9 @@ const createAllTables = async () => {
       salary DECIMAL(10,2), 
       shift VARCHAR(50) DEFAULT 'morning', 
       status VARCHAR(50) DEFAULT 'active', 
-      joined_date DATE DEFAULT CURRENT_DATE, 
-      created_at TIMESTAMP DEFAULT NOW(), 
-      updated_at TIMESTAMP DEFAULT NOW()
+      joined_date DATE DEFAULT get_ist_date(), 
+      created_at TIMESTAMP DEFAULT get_ist_timestamp(), 
+      updated_at TIMESTAMP DEFAULT get_ist_timestamp()
     )`);
     
     await client.query(`CREATE TABLE IF NOT EXISTS customers (
@@ -96,7 +115,7 @@ const createAllTables = async () => {
       pincode VARCHAR(10), 
       city VARCHAR(100), 
       state VARCHAR(100), 
-      created_at TIMESTAMP DEFAULT NOW(), 
+      created_at TIMESTAMP DEFAULT get_ist_timestamp(), 
       is_active BOOLEAN DEFAULT TRUE
     )`);
     
@@ -107,14 +126,14 @@ const createAllTables = async () => {
       pack_size VARCHAR(50), 
       quantity_per_day INTEGER DEFAULT 1, 
       price DECIMAL(10,2), 
-      created_at TIMESTAMP DEFAULT NOW()
+      created_at TIMESTAMP DEFAULT get_ist_timestamp()
     )`);
     
     await client.query(`CREATE TABLE IF NOT EXISTS customer_delivery_assignments (
       id SERIAL PRIMARY KEY, 
       customer_id INTEGER REFERENCES customers(id) ON DELETE CASCADE, 
       delivery_boy_id INTEGER REFERENCES delivery_boys(id) ON DELETE CASCADE, 
-      assigned_at TIMESTAMP DEFAULT NOW(), 
+      assigned_at TIMESTAMP DEFAULT get_ist_timestamp(), 
       UNIQUE(customer_id)
     )`);
     
@@ -131,8 +150,9 @@ const createAllTables = async () => {
       total_amount DECIMAL(10,2), 
       status VARCHAR(50) DEFAULT 'pending',
       delivered BOOLEAN DEFAULT FALSE,
-      created_at TIMESTAMP DEFAULT NOW(),
-      updated_at TIMESTAMP DEFAULT NOW()
+      created_at TIMESTAMP DEFAULT get_ist_timestamp(),
+      updated_at TIMESTAMP DEFAULT get_ist_timestamp(),
+      UNIQUE(customer_id, delivery_date)
     )`);
     
     // ✅ Add index for faster queries
@@ -145,7 +165,7 @@ const createAllTables = async () => {
       name VARCHAR(200) NOT NULL, 
       packs TEXT, 
       image_url VARCHAR(500), 
-      created_at TIMESTAMP DEFAULT NOW()
+      created_at TIMESTAMP DEFAULT get_ist_timestamp()
     )`);
     
     await client.query(`CREATE TABLE IF NOT EXISTS farm_purchases (
@@ -157,20 +177,20 @@ const createAllTables = async () => {
       total_cost DECIMAL(10,2), 
       farm_name VARCHAR(200), 
       invoice_number VARCHAR(100), 
-      purchase_date DATE DEFAULT CURRENT_DATE, 
+      purchase_date DATE DEFAULT get_ist_date(), 
       notes TEXT, 
       remaining_quantity DECIMAL(10,2), 
-      created_at TIMESTAMP DEFAULT NOW()
+      created_at TIMESTAMP DEFAULT get_ist_timestamp()
     )`);
     
     await client.query(`CREATE TABLE IF NOT EXISTS packing_batches (
       id SERIAL PRIMARY KEY, 
       batch_number VARCHAR(100) NOT NULL, 
       product_name VARCHAR(200) NOT NULL, 
-      packed_date DATE DEFAULT CURRENT_DATE, 
+      packed_date DATE DEFAULT get_ist_date(), 
       total_packets INTEGER DEFAULT 0, 
       total_quantity DECIMAL(10,2) DEFAULT 0, 
-      created_at TIMESTAMP DEFAULT NOW()
+      created_at TIMESTAMP DEFAULT get_ist_timestamp()
     )`);
     
     await client.query(`CREATE TABLE IF NOT EXISTS packing_items (
@@ -193,7 +213,7 @@ const createAllTables = async () => {
       unit VARCHAR(50), 
       packed_date DATE, 
       purchase_id INTEGER REFERENCES farm_purchases(id), 
-      created_at TIMESTAMP DEFAULT NOW()
+      created_at TIMESTAMP DEFAULT get_ist_timestamp()
     )`);
     
     await client.query(`CREATE TABLE IF NOT EXISTS sales (
@@ -201,7 +221,7 @@ const createAllTables = async () => {
       customer_name VARCHAR(200), 
       customer_phone VARCHAR(20), 
       total_amount DECIMAL(10,2), 
-      sold_at TIMESTAMP DEFAULT NOW()
+      sold_at TIMESTAMP DEFAULT get_ist_timestamp()
     )`);
     
     await client.query(`CREATE TABLE IF NOT EXISTS sale_items (
@@ -231,4 +251,4 @@ pool.connect((err) => {
   }
 });
 
-module.exports = pool;
+module.exports = { pool, getISTDate, getISTDateFromDB, queryWithTimezone };
