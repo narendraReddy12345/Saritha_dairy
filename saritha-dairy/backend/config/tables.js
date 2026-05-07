@@ -1,9 +1,22 @@
+// config/tables.js
 const pool = require('./db');
 
 const createAllTables = async () => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    await client.query("SET TIME ZONE 'Asia/Kolkata'");
+
+    // Add delivered column to daily_delivery if not exists
+    await client.query(`
+      DO $$ 
+      BEGIN 
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+          WHERE table_name='daily_delivery' AND column_name='delivered') THEN
+          ALTER TABLE daily_delivery ADD COLUMN delivered BOOLEAN DEFAULT FALSE;
+        END IF;
+      END $$;
+    `);
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS delivery_boys (
@@ -53,11 +66,19 @@ const createAllTables = async () => {
         delivery_date DATE DEFAULT CURRENT_DATE, product_name VARCHAR(100),
         pack_size VARCHAR(50), quantity INTEGER DEFAULT 1,
         price DECIMAL(10,2), total_amount DECIMAL(10,2),
-        status VARCHAR(50) DEFAULT 'pending', created_at TIMESTAMP DEFAULT NOW()
+        status VARCHAR(50) DEFAULT 'pending',
+        delivered BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
       )
     `);
 
-    // Updated products table with product_type field
+    await client.query(`
+      ALTER TABLE daily_delivery 
+      DROP CONSTRAINT IF EXISTS unique_customer_daily_delivery,
+      ADD CONSTRAINT unique_customer_daily_delivery UNIQUE (customer_id, delivery_date)
+    `);
+
     await client.query(`
       CREATE TABLE IF NOT EXISTS products (
         id SERIAL PRIMARY KEY, 
@@ -71,7 +92,6 @@ const createAllTables = async () => {
       )
     `);
 
-    // Farm purchases (for raw dairy products)
     await client.query(`
       CREATE TABLE IF NOT EXISTS farm_purchases (
         id SERIAL PRIMARY KEY, 
@@ -90,7 +110,6 @@ const createAllTables = async () => {
       )
     `);
 
-    // NEW: Non-dairy purchases (for packed/finished goods)
     await client.query(`
       CREATE TABLE IF NOT EXISTS non_dairy_purchases (
         id SERIAL PRIMARY KEY,
@@ -110,7 +129,6 @@ const createAllTables = async () => {
       )
     `);
 
-    // Add index for better performance
     await client.query(`
       CREATE INDEX IF NOT EXISTS idx_non_dairy_purchases_date 
       ON non_dairy_purchases(purchase_date)
@@ -186,16 +204,15 @@ const createAllTables = async () => {
       )
     `);
 
-    // NEW: Stock movement log for tracking all inventory changes
     await client.query(`
       CREATE TABLE IF NOT EXISTS stock_movements (
         id SERIAL PRIMARY KEY,
         product_name VARCHAR(200) NOT NULL,
         product_type VARCHAR(50) NOT NULL,
-        movement_type VARCHAR(50) NOT NULL, -- 'purchase', 'sale', 'return', 'adjustment'
+        movement_type VARCHAR(50) NOT NULL,
         quantity DECIMAL(10,2) NOT NULL,
         unit VARCHAR(50),
-        reference_id INTEGER, -- purchase_id, sale_id, etc.
+        reference_id INTEGER,
         reference_type VARCHAR(50),
         previous_stock DECIMAL(10,2),
         new_stock DECIMAL(10,2),
@@ -205,7 +222,6 @@ const createAllTables = async () => {
       )
     `);
 
-    // Add indexes for stock movements
     await client.query(`
       CREATE INDEX IF NOT EXISTS idx_stock_movements_product 
       ON stock_movements(product_name, product_type)
@@ -216,7 +232,6 @@ const createAllTables = async () => {
       ON stock_movements(created_at)
     `);
 
-    // NEW: Suppliers table for better supplier management
     await client.query(`
       CREATE TABLE IF NOT EXISTS suppliers (
         id SERIAL PRIMARY KEY,
@@ -225,14 +240,13 @@ const createAllTables = async () => {
         email VARCHAR(200),
         address TEXT,
         gst_number VARCHAR(50),
-        supplier_type VARCHAR(50) DEFAULT 'both', -- 'dairy', 'non-dairy', 'both'
+        supplier_type VARCHAR(50) DEFAULT 'both',
         is_active BOOLEAN DEFAULT TRUE,
         created_at TIMESTAMP DEFAULT NOW(),
         updated_at TIMESTAMP DEFAULT NOW()
       )
     `);
 
-    // Add supplier_id to purchase tables
     await client.query(`
       ALTER TABLE farm_purchases 
       ADD COLUMN IF NOT EXISTS supplier_id INTEGER REFERENCES suppliers(id) ON DELETE SET NULL
@@ -243,7 +257,6 @@ const createAllTables = async () => {
       ADD COLUMN IF NOT EXISTS supplier_id INTEGER REFERENCES suppliers(id) ON DELETE SET NULL
     `);
 
-    // NEW: Non-dairy stock table for tracking individual product variants
     await client.query(`
       CREATE TABLE IF NOT EXISTS non_dairy_stock (
         id SERIAL PRIMARY KEY,
@@ -261,7 +274,6 @@ const createAllTables = async () => {
       )
     `);
 
-    // Create trigger to update updated_at timestamp
     await client.query(`
       CREATE OR REPLACE FUNCTION update_updated_at_column()
       RETURNS TRIGGER AS $$
@@ -272,7 +284,6 @@ const createAllTables = async () => {
       $$ language 'plpgsql';
     `);
 
-    // ✅ UPDATED: Standalone Non-Dairy Items table (with image_url column)
     await client.query(`
       CREATE TABLE IF NOT EXISTS non_dairy_items (
         id SERIAL PRIMARY KEY,
@@ -290,7 +301,6 @@ const createAllTables = async () => {
       )
     `);
 
-    // Create purchase history table for non-dairy items
     await client.query(`
       CREATE TABLE IF NOT EXISTS non_dairy_purchase_history (
         id SERIAL PRIMARY KEY,
@@ -307,7 +317,6 @@ const createAllTables = async () => {
       )
     `);
 
-    // Add indexes
     await client.query(`
       CREATE INDEX IF NOT EXISTS idx_non_dairy_items_name 
       ON non_dairy_items(name)
@@ -323,7 +332,6 @@ const createAllTables = async () => {
       ON non_dairy_purchase_history(created_at)
     `);
 
-    // Add triggers for tables with updated_at
     const tablesWithUpdatedAt = ['products', 'farm_purchases', 'non_dairy_purchases', 'store_stock', 'suppliers', 'non_dairy_stock', 'non_dairy_items'];
     
     for (const table of tablesWithUpdatedAt) {

@@ -11,7 +11,6 @@ require('dotenv').config();
 const app = express();
 
 // Import database modules
-const pool = require('./config/db');
 const createAllTables = require('./config/tables');
 
 app.use(cors());
@@ -20,13 +19,11 @@ app.use('/uploads', express.static('uploads'));
 
 if (!fs.existsSync('./uploads')) fs.mkdirSync('./uploads');
 
-// Run migration and start server
 const startServer = async () => {
   try {
     await createAllTables();
     console.log('✅ Database migration completed');
     
-    // Mount Routes
     app.use('/api/auth', require('./routes/auth'));
     app.use('/api/delivery-boys', require('./routes/deliveryBoys'));
     app.use('/api/admin', require('./routes/customers'));
