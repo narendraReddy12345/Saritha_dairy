@@ -4,6 +4,9 @@ const router = express.Router();
 const authController = require('../controllers/authController');
 const { verifyToken } = require('../middleware/auth');
 
+// Check if controller functions exist
+console.log('🔍 Available auth controller functions:', Object.keys(authController));
+
 // Public routes
 router.post('/admin/login', authController.adminLogin);
 router.post('/admin/login-phone', authController.adminLoginPhone);

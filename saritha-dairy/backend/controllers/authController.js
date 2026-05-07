@@ -4,8 +4,8 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const { JWT_SECRET, ADMIN_EMAILS, ADMIN_PHONES } = require('../middleware/auth');
 
-console.log('👑 Admin Emails configured:', ADMIN_EMAILS);
-console.log('📱 Admin Phone Numbers configured:', ADMIN_PHONES);
+console.log('👑 Auth Controller - Admin Emails:', ADMIN_EMAILS);
+console.log('📱 Auth Controller - Admin Phones:', ADMIN_PHONES);
 
 // ✅ ADMIN LOGIN WITH EMAIL
 exports.adminLogin = async (req, res) => {
@@ -14,6 +14,7 @@ exports.adminLogin = async (req, res) => {
   console.log('🔐 Admin login attempt (email):', email);
   
   try {
+    // Check if ADMIN_EMAILS exists and includes the email
     if (!ADMIN_EMAILS || !ADMIN_EMAILS.includes(email?.toLowerCase().trim())) {
       console.log('❌ Email not authorized');
       return res.status(401).json({ success: false, error: 'Not authorized as admin' });
@@ -45,17 +46,17 @@ exports.adminLogin = async (req, res) => {
   }
 };
 
-// ✅ ADMIN LOGIN WITH PHONE (Single function - no duplicates)
+// ✅ ADMIN LOGIN WITH PHONE (Single function)
 exports.adminLoginPhone = async (req, res) => {
   const { phone, password } = req.body;
   
   console.log('👑 Admin login attempt (phone):', phone);
+  console.log('📱 Available admin phones:', ADMIN_PHONES);
   
   try {
-    // Check if phone number is in the admin list
+    // Check if ADMIN_PHONES exists and includes the phone
     if (!ADMIN_PHONES || !ADMIN_PHONES.includes(phone)) {
       console.log('❌ Phone not authorized - Not in admin list');
-      console.log('📱 Authorized phones:', ADMIN_PHONES);
       return res.status(401).json({ 
         success: false, 
         error: 'Not authorized as admin. Phone number not recognized.' 
@@ -77,7 +78,6 @@ exports.adminLoginPhone = async (req, res) => {
     let adminEmail = '';
     
     try {
-      // Check if users table exists and try to find admin
       const result = await pool.query(
         'SELECT name, email FROM users WHERE phone = $1 AND role = $2',
         [phone, 'admin']
@@ -286,96 +286,4 @@ exports.changePassword = async (req, res) => {
 exports.verifyToken = (req, res) => { 
   console.log('✅ Token verified for:', req.user?.name);
   res.json({ success: true, user: req.user }); 
-};
-
-// ✅ ADD NEW ADMIN (For admin management)
-exports.addAdmin = async (req, res) => {
-  const { name, phone, email, password } = req.body;
-  
-  console.log('➕ Adding new admin:', { name, phone, email });
-  
-  try {
-    // Check if user already exists
-    const existingUser = await pool.query(
-      'SELECT id FROM users WHERE phone = $1 OR email = $2',
-      [phone, email]
-    );
-    
-    if (existingUser.rows.length > 0) {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'User with this phone or email already exists' 
-      });
-    }
-    
-    // Hash password
-    const hashedPassword = await bcrypt.hash(password, 10);
-    
-    // Insert new admin
-    const result = await pool.query(
-      `INSERT INTO users (name, phone, email, password, role, created_at) 
-       VALUES ($1, $2, $3, $4, 'admin', NOW()) 
-       RETURNING id, name, phone, email`,
-      [name, phone, email, hashedPassword]
-    );
-    
-    const newAdmin = result.rows[0];
-    console.log('✅ New admin added:', newAdmin);
-    
-    res.json({
-      success: true,
-      message: 'Admin added successfully',
-      admin: newAdmin
-    });
-  } catch (error) {
-    console.error('❌ Error adding admin:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-};
-
-// ✅ GET ALL ADMINS
-exports.getAllAdmins = async (req, res) => {
-  console.log('📋 Fetching all admins');
-  
-  try {
-    const result = await pool.query(
-      'SELECT id, name, phone, email, created_at FROM users WHERE role = $1 ORDER BY created_at DESC',
-      ['admin']
-    );
-    
-    res.json({
-      success: true,
-      data: result.rows
-    });
-  } catch (error) {
-    console.error('❌ Error fetching admins:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-};
-
-// ✅ DELETE ADMIN
-exports.deleteAdmin = async (req, res) => {
-  const { id } = req.params;
-  
-  console.log('🗑️ Deleting admin with ID:', id);
-  
-  try {
-    const result = await pool.query(
-      'DELETE FROM users WHERE id = $1 AND role = $2 RETURNING id',
-      [id, 'admin']
-    );
-    
-    if (result.rows.length === 0) {
-      return res.status(404).json({ 
-        success: false, 
-        error: 'Admin not found' 
-      });
-    }
-    
-    console.log('✅ Admin deleted successfully');
-    res.json({ success: true, message: 'Admin deleted successfully' });
-  } catch (error) {
-    console.error('❌ Error deleting admin:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
 };
