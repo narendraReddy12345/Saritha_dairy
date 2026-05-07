@@ -2,12 +2,21 @@
 const pool = require('../config/db');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
-const { JWT_SECRET, ADMIN_EMAILS } = require('../middleware/auth');
+const { JWT_SECRET, ADMIN_EMAILS, ADMIN_PHONES } = require('../middleware/auth');
 
+// Multiple admin phone numbers (can also come from env)
+const ADMIN_PHONE_LIST = process.env.ADMIN_PHONES 
+  ? process.env.ADMIN_PHONES.split(',').map(p => p.trim())
+  : ['9347745435', '9398263810', '9666966811'];
+
+console.log('👑 Admin Emails configured:', ADMIN_EMAILS);
+console.log('📱 Admin Phone Numbers configured:', ADMIN_PHONE_LIST);
+
+// ✅ ADMIN LOGIN WITH EMAIL
 exports.adminLogin = async (req, res) => {
   const { email, password } = req.body;
   
-  console.log('🔐 Admin login attempt:', email);
+  console.log('🔐 Admin login attempt (email):', email);
   
   try {
     if (!ADMIN_EMAILS.includes(email?.toLowerCase().trim())) {
@@ -28,7 +37,7 @@ exports.adminLogin = async (req, res) => {
       { expiresIn: '24h' }
     );
     
-    console.log('✅ Admin logged in');
+    console.log('✅ Admin logged in via email');
     
     res.json({ 
       success: true, 
@@ -41,38 +50,71 @@ exports.adminLogin = async (req, res) => {
   }
 };
 
+// ✅ ADMIN LOGIN WITH PHONE (Supporting multiple admins)
 exports.adminLoginPhone = async (req, res) => {
   const { phone, password } = req.body;
   
-  console.log('👑 Admin phone login attempt:', phone);
-  
-  const ADMIN_PHONE = '9347745435';
+  console.log('👑 Admin login attempt (phone):', phone);
   
   try {
-    if (phone !== ADMIN_PHONE) {
-      console.log('❌ Phone not authorized');
-      return res.status(401).json({ success: false, error: 'Not authorized as admin' });
+    // Check if phone number is in the admin list
+    if (!ADMIN_PHONE_LIST.includes(phone)) {
+      console.log('❌ Phone not authorized - Not in admin list');
+      console.log('📱 Authorized phones:', ADMIN_PHONE_LIST);
+      return res.status(401).json({ 
+        success: false, 
+        error: 'Not authorized as admin. Phone number not recognized.' 
+      });
     }
     
     const adminPassword = process.env.ADMIN_PASSWORD || 'admin123';
     
     if (password !== adminPassword) {
-      console.log('❌ Wrong password');
-      return res.status(401).json({ success: false, error: 'Invalid admin password' });
+      console.log('❌ Wrong password for admin phone:', phone);
+      return res.status(401).json({ 
+        success: false, 
+        error: 'Invalid admin password' 
+      });
+    }
+    
+    // Optional: Find admin name from database or use a default
+    let adminName = 'Admin';
+    let adminEmail = '';
+    
+    try {
+      // Try to find admin in database
+      const result = await pool.query(
+        'SELECT name, email FROM users WHERE phone = $1 AND role = $2',
+        [phone, 'admin']
+      );
+      
+      if (result.rows.length > 0) {
+        adminName = result.rows[0].name;
+        adminEmail = result.rows[0].email || '';
+        console.log('📝 Found admin in DB:', adminName);
+      }
+    } catch (dbError) {
+      console.log('⚠️ Could not fetch admin from DB, using defaults');
     }
     
     const token = jwt.sign(
-      { id: 0, phone, role: 'admin', name: 'Admin' },
+      { id: 0, phone, role: 'admin', name: adminName, email: adminEmail },
       JWT_SECRET,
       { expiresIn: '24h' }
     );
     
-    console.log('✅ Admin logged in via phone');
+    console.log('✅ Admin logged in via phone:', phone);
     
     res.json({
       success: true,
       token,
-      user: { id: 0, phone: ADMIN_PHONE, name: 'Admin', role: 'admin' }
+      user: { 
+        id: 0, 
+        phone, 
+        name: adminName, 
+        email: adminEmail,
+        role: 'admin' 
+      }
     });
   } catch (error) {
     console.error('❌ Admin phone login error:', error);
@@ -80,6 +122,7 @@ exports.adminLoginPhone = async (req, res) => {
   }
 };
 
+// ✅ DELIVERY BOY LOGIN
 exports.deliveryBoyLogin = async (req, res) => {
   const { phone, password } = req.body;
   
@@ -126,7 +169,7 @@ exports.deliveryBoyLogin = async (req, res) => {
       role: 'delivery'
     };
     
-    console.log('📦 Returning user data:', userData);
+    console.log('📦 Returning delivery boy data');
     
     res.json({ success: true, token, user: userData });
   } catch (error) { 
@@ -238,7 +281,103 @@ exports.changePassword = async (req, res) => {
   }
 };
 
+// ✅ VERIFY TOKEN
 exports.verifyToken = (req, res) => { 
   console.log('✅ Token verified for:', req.user?.name);
   res.json({ success: true, user: req.user }); 
+};
+
+// ✅ ADD NEW ADMIN (For admin management)
+exports.addAdmin = async (req, res) => {
+  const { name, phone, email, password } = req.body;
+  
+  console.log('➕ Adding new admin:', { name, phone, email });
+  
+  try {
+    // Check if user already exists
+    const existingUser = await pool.query(
+      'SELECT id FROM users WHERE phone = $1 OR email = $2',
+      [phone, email]
+    );
+    
+    if (existingUser.rows.length > 0) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'User with this phone or email already exists' 
+      });
+    }
+    
+    // Hash password
+    const hashedPassword = await bcrypt.hash(password, 10);
+    
+    // Insert new admin
+    const result = await pool.query(
+      `INSERT INTO users (name, phone, email, password, role, created_at) 
+       VALUES ($1, $2, $3, $4, 'admin', NOW()) 
+       RETURNING id, name, phone, email`,
+      [name, phone, email, hashedPassword]
+    );
+    
+    const newAdmin = result.rows[0];
+    console.log('✅ New admin added:', newAdmin);
+    
+    // Optional: Also add to environment variable list
+    // This could be handled by updating .env file or database
+    
+    res.json({
+      success: true,
+      message: 'Admin added successfully',
+      admin: newAdmin
+    });
+  } catch (error) {
+    console.error('❌ Error adding admin:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+// ✅ GET ALL ADMINS
+exports.getAllAdmins = async (req, res) => {
+  console.log('📋 Fetching all admins');
+  
+  try {
+    const result = await pool.query(
+      'SELECT id, name, phone, email, created_at FROM users WHERE role = $1 ORDER BY created_at DESC',
+      ['admin']
+    );
+    
+    res.json({
+      success: true,
+      data: result.rows
+    });
+  } catch (error) {
+    console.error('❌ Error fetching admins:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+// ✅ DELETE ADMIN
+exports.deleteAdmin = async (req, res) => {
+  const { id } = req.params;
+  
+  console.log('🗑️ Deleting admin with ID:', id);
+  
+  try {
+    const result = await pool.query(
+      'DELETE FROM users WHERE id = $1 AND role = $2 RETURNING id',
+      [id, 'admin']
+    );
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ 
+        success: false, 
+        error: 'Admin not found' 
+      });
+    }
+    
+    console.log('✅ Admin deleted successfully');
+    res.json({ success: true, message: 'Admin deleted successfully' });
+  } catch (error) {
+    console.error('❌ Error deleting admin:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
 };
