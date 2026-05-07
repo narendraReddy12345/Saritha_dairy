@@ -220,3 +220,103 @@
     padding: 12px 14px;
   }
 }
+/* Add these styles to your existing Sidebar.css */
+
+/* Submenu Styles */
+.nav-item-innovative.has-submenu {
+  position: relative;
+}
+
+.submenu-arrow {
+  margin-left: auto;
+  font-size: 10px;
+  transition: transform 0.2s;
+}
+
+.submenu-innovative {
+  margin-left: 48px;
+  padding-left: 16px;
+  border-left: 1px solid rgba(255, 255, 255, 0.1);
+  margin-bottom: 8px;
+  animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.submenu-item-innovative {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 16px;
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.7);
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.2s;
+  border-radius: 10px;
+  margin: 2px 0;
+}
+
+.submenu-item-innovative:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+  transform: translateX(4px);
+}
+
+.submenu-item-innovative.active {
+  background: rgba(59, 130, 246, 0.2);
+  color: white;
+  border-left: 3px solid #3b82f6;
+}
+
+.submenu-icon {
+  font-size: 16px;
+  width: 24px;
+}
+
+.submenu-label {
+  font-size: 12px;
+}
+
+/* Collapsed sidebar - hide submenus */
+.sidebar-innovative.collapsed .submenu-innovative {
+  display: none;
+}
+
+.sidebar-innovative.collapsed .nav-item-innovative.has-submenu .submenu-arrow {
+  display: none;
+}
+
+/* Tablet mode adjustments */
+@media (max-width: 1024px) {
+  .submenu-innovative {
+    margin-left: 0;
+    padding-left: 0;
+    border-left: none;
+  }
+  
+  .submenu-item-innovative {
+    padding: 8px 12px;
+    justify-content: center;
+  }
+  
+  .submenu-label {
+    display: none;
+  }
+  
+  .submenu-icon {
+    font-size: 20px;
+    width: auto;
+  }
+}

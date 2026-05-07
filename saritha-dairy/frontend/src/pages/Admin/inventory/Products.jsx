@@ -5,7 +5,7 @@ import './Products.css';
 const API_URL = 'https://saritha-dairy-api.onrender.com/api';
 const BASE_URL = 'https://saritha-dairy-api.onrender.com';
 
-// ✅ Helper for image URLs - handles all formats
+// Helper for image URLs
 const getImageUrl = (url) => {
   if (!url) return null;
   if (url.startsWith('http')) return url;
@@ -21,7 +21,6 @@ const Products = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [showToast, setShowToast] = useState({ show: false, message: '', type: '' });
   const [submitting, setSubmitting] = useState(false);
-  const [viewMode, setViewMode] = useState('grid');
   
   const [formData, setFormData] = useState({
     name: '',
@@ -35,7 +34,6 @@ const Products = () => {
   }, []);
 
   const getToken = () => sessionStorage.getItem('authToken');
-
   const getAuthHeaders = () => ({
     'Authorization': `Bearer ${getToken()}`
   });
@@ -192,7 +190,7 @@ const Products = () => {
       name: product.name,
       packs: packs,
       image: null,
-      imagePreview: getImageUrl(product.image_url) // ✅ FIXED
+      imagePreview: getImageUrl(product.image_url)
     });
     setShowAddModal(true);
   };
@@ -215,23 +213,7 @@ const Products = () => {
     if (n.includes('ghee')) return '🫕';
     if (n.includes('butter')) return '🧈';
     if (n.includes('cream')) return '🍶';
-    if (n.includes('lassi')) return '🥤';
     return '📦';
-  };
-
-  const getProductColor = (name) => {
-    const n = name.toLowerCase();
-    if (n.includes('milk')) return { bg: '#eff6ff', text: '#3b82f6', grad: 'linear-gradient(135deg, #eff6ff, #dbeafe)' };
-    if (n.includes('curd')) return { bg: '#f0fdf4', text: '#10b981', grad: 'linear-gradient(135deg, #f0fdf4, #dcfce7)' };
-    if (n.includes('paneer')) return { bg: '#fffbeb', text: '#f59e0b', grad: 'linear-gradient(135deg, #fffbeb, #fef3c7)' };
-    if (n.includes('ghee')) return { bg: '#fef2f2', text: '#ef4444', grad: 'linear-gradient(135deg, #fef2f2, #fee2e2)' };
-    if (n.includes('butter')) return { bg: '#faf5ff', text: '#8b5cf6', grad: 'linear-gradient(135deg, #faf5ff, #ede9fe)' };
-    return { bg: '#f8fafc', text: '#64748b', grad: 'linear-gradient(135deg, #f8fafc, #f1f5f9)' };
-  };
-
-  const formatPacks = (packs) => {
-    if (!packs) return [];
-    return typeof packs === 'string' ? JSON.parse(packs) : packs;
   };
 
   const filteredProducts = products.filter(product =>
@@ -239,143 +221,121 @@ const Products = () => {
   );
 
   return (
-    <div className="modern-products-container">
-      {/* Toast */}
+    <div className="products-container-modern">
+      {/* Toast Notification */}
       {showToast.show && (
-        <div className={`modern-toast ${showToast.type}`}>
+        <div className={`toast-notification ${showToast.type}`}>
           <span>{showToast.message}</span>
           <button onClick={() => setShowToast({ show: false })}>×</button>
         </div>
       )}
 
-      {/* Hero Header */}
-      <div className="products-hero">
-        <div className="hero-content">
-          <div className="hero-icon">🍀</div>
-          <div>
-            <h1>Product Catalog</h1>
-            <p>{products.length} products • Manage your dairy catalog</p>
+      {/* Header Section */}
+      <div className="products-header">
+        <div className="header-left">
+          <div className="header-icon">🍶</div>
+          <div className="header-text">
+            <h1>Product Gallery</h1>
+            <p>{products.length} products in your collection</p>
           </div>
         </div>
-        <div className="hero-actions">
-          <div className="view-toggle">
-            <button className={`view-btn ${viewMode === 'grid' ? 'active' : ''}`} onClick={() => setViewMode('grid')} title="Grid View">⊞</button>
-            <button className={`view-btn ${viewMode === 'list' ? 'active' : ''}`} onClick={() => setViewMode('list')} title="List View">☰</button>
-          </div>
-          <button className="add-product-btn" onClick={() => { setEditingProduct(null); resetForm(); setShowAddModal(true); }}>
-            <span>+</span> Add Product
-          </button>
-        </div>
+        <button className="add-product-button" onClick={() => { setEditingProduct(null); resetForm(); setShowAddModal(true); }}>
+          <span>+</span> Add New Product
+        </button>
       </div>
 
-      {/* Search Bar */}
-      <div className="products-search-bar">
-        <span className="search-icon">🔍</span>
-        <input
-          type="text"
-          placeholder="Search products by name..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-        />
-        {searchTerm && (
-          <button className="search-clear" onClick={() => setSearchTerm('')}>×</button>
-        )}
-        <span className="search-results">{filteredProducts.length} of {products.length}</span>
-      </div>
-
-      {/* Content */}
-      {loading ? (
-        <div className="products-loading">
-          <div className="loading-pulse">
-            <span>🥛</span>
-          </div>
-          <p>Loading products...</p>
-        </div>
-      ) : filteredProducts.length === 0 ? (
-        <div className="products-empty">
-          <div className="empty-illustration">
-            <span>📦</span>
-            <div className="empty-shadow"></div>
-          </div>
-          <h3>{searchTerm ? 'No products match your search' : 'No products yet'}</h3>
-          <p>{searchTerm ? 'Try a different search term' : 'Click "Add Product" to create your first product'}</p>
-          {!searchTerm && (
-            <button onClick={() => { resetForm(); setShowAddModal(true); }}>+ Add Your First Product</button>
+      {/* Search Section */}
+      <div className="search-section">
+        <div className="search-container">
+          <span className="search-icon">🔍</span>
+          <input
+            type="text"
+            placeholder="Search products..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+          {searchTerm && (
+            <button className="clear-search" onClick={() => setSearchTerm('')}>✕</button>
           )}
         </div>
-      ) : viewMode === 'grid' ? (
-        /* ========== GRID VIEW ========== */
-        <div className="products-grid">
-          {filteredProducts.map(product => {
-            const packs = formatPacks(product.packs);
-            const imageUrl = getImageUrl(product.image_url); // ✅ FIXED
-            const color = getProductColor(product.name);
-            
-            return (
-              <div key={product.id} className="product-card">
-                <div className="product-card-image" style={{ background: color.grad }}>
-                  {imageUrl ? (
-                    <img src={imageUrl} alt={product.name} 
-                      onError={(e) => { 
-                        e.target.style.display = 'none'; 
-                        e.target.nextElementSibling.style.display = 'flex';
-                      }} 
-                    />
-                  ) : null}
-                  <span className="product-card-icon" style={{ display: imageUrl ? 'none' : 'flex' }}>
-                    {getProductIcon(product.name)}
-                  </span>
-                  <div className="product-card-overlay">
-                    <button onClick={() => handleEdit(product)} className="overlay-btn edit" title="Edit">✏️</button>
-                    <button onClick={() => handleDelete(product.id, product.name)} className="overlay-btn delete" title="Delete">🗑️</button>
-                  </div>
-                </div>
-                <div className="product-card-body">
-                  <h3 className="product-card-name">{product.name}</h3>
-                  <div className="product-card-packs">
-                    {packs.map((pack, idx) => (
-                      <div key={idx} className="pack-row">
-                        <span className="pack-size">{pack.size}{pack.unit}</span>
-                        <span className="pack-price">₹{pack.price}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
+        <div className="search-stats">
+          {filteredProducts.length} of {products.length} products
+        </div>
+      </div>
+
+      {/* Loading State */}
+      {loading ? (
+        <div className="loading-state">
+          <div className="loading-spinner-modern">
+            <span>🥛</span>
+          </div>
+          <p>Loading your products...</p>
+        </div>
+      ) : filteredProducts.length === 0 ? (
+        /* Empty State */
+        <div className="empty-state-modern">
+          <div className="empty-illustration">
+            <span>📦</span>
+            <div className="empty-glow"></div>
+          </div>
+          <h3>{searchTerm ? 'No products found' : 'Your gallery is empty'}</h3>
+          <p>{searchTerm ? `No results for "${searchTerm}"` : 'Start by adding your first product'}</p>
+          {!searchTerm && (
+            <button className="empty-add-btn" onClick={() => { resetForm(); setShowAddModal(true); }}>
+              + Add Your First Product
+            </button>
+          )}
         </div>
       ) : (
-        /* ========== LIST VIEW ========== */
-        <div className="products-list">
+        /* Product Grid - With Top-Right Action Buttons */
+        <div className="product-gallery">
           {filteredProducts.map(product => {
-            const packs = formatPacks(product.packs);
-            const imageUrl = getImageUrl(product.image_url); // ✅ FIXED
-            const color = getProductColor(product.name);
+            const imageUrl = getImageUrl(product.image_url);
             
             return (
-              <div key={product.id} className="product-list-item">
-                <div className="list-item-image" style={{ background: color.bg }}>
+              <div key={product.id} className="product-card-simple">
+                {/* Product Image with Overlay Actions */}
+                <div className="card-image-wrapper">
                   {imageUrl ? (
-                    <img src={imageUrl} alt={product.name} 
-                      onError={(e) => { e.target.style.display = 'none'; }} 
+                    <img 
+                      src={imageUrl} 
+                      alt={product.name}
+                      onError={(e) => {
+                        e.target.style.display = 'none';
+                        e.target.parentElement.querySelector('.image-placeholder').style.display = 'flex';
+                      }}
                     />
-                  ) : (
+                  ) : null}
+                  <div className="image-placeholder" style={{ display: imageUrl ? 'none' : 'flex' }}>
                     <span>{getProductIcon(product.name)}</span>
-                  )}
-                </div>
-                <div className="list-item-info">
-                  <h3>{product.name}</h3>
-                  <div className="list-item-packs">
-                    {packs.map((pack, idx) => (
-                      <span key={idx} className="list-pack-tag">{pack.size}{pack.unit} - ₹{pack.price}</span>
-                    ))}
+                  </div>
+                  
+                  {/* Action Buttons - Top Right Corner */}
+                  <div className="card-actions-overlay">
+                    <button 
+                      className="action-btn-overlay edit-btn-overlay" 
+                      onClick={() => handleEdit(product)}
+                      title="Edit Product"
+                    >
+                      ✏️
+                    </button>
+                    <button 
+                      className="action-btn-overlay delete-btn-overlay" 
+                      onClick={() => handleDelete(product.id, product.name)}
+                      title="Delete Product"
+                    >
+                      🗑️
+                    </button>
                   </div>
                 </div>
-                <div className="list-item-actions">
-                  <button onClick={() => handleEdit(product)} className="list-action-btn edit">✏️ Edit</button>
-                  <button onClick={() => handleDelete(product.id, product.name)} className="list-action-btn delete">🗑️</button>
+
+                {/* Product Name */}
+                <div className="card-info">
+                  <h3 className="product-name">{product.name}</h3>
                 </div>
+
+                {/* Hover Glow Effect */}
+                <div className="card-glow"></div>
               </div>
             );
           })}

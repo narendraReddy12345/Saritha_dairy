@@ -19,6 +19,8 @@ import DeliveryHistory from './pages/Admin/Delivery/DeliveryHistory';
 import CustomerDashboard from './pages/Customer/CustomerDashboard';
 import ChangePassword from './pages/Customer/ChangePassword';
 import CreditManagement from './pages/Admin/CreditManagement/CreditManagement';
+// Fix the import path - use NonDairyPurchase instead of AddNonDairyPurchase
+import NonDairyPurchase from './pages/Admin/inventory/AddNonDairyPurchase';
 
 function App() {
   return (
@@ -77,6 +79,16 @@ function App() {
               </RoleBasedRoute>
             </ProtectedRoute>
           } />
+          
+         <Route path="/non-dairy-purchase" element={
+  <ProtectedRoute>
+    <RoleBasedRoute allowedRoles={['admin']}>
+      <AppLayout>
+        <NonDairyPurchase />
+      </AppLayout>
+    </RoleBasedRoute>
+  </ProtectedRoute>
+} />
           
           <Route path="/inventory/store-stock" element={
             <ProtectedRoute>
@@ -163,15 +175,16 @@ function App() {
               </RoleBasedRoute>
             </ProtectedRoute>
           } />
+          
           <Route path="/credit-management" element={
-  <ProtectedRoute>
-    <RoleBasedRoute allowedRoles={['admin']}>
-      <AppLayout>
-        <CreditManagement />
-      </AppLayout>
-    </RoleBasedRoute>
-  </ProtectedRoute>
-} />
+            <ProtectedRoute>
+              <RoleBasedRoute allowedRoles={['admin']}>
+                <AppLayout>
+                  <CreditManagement />
+                </AppLayout>
+              </RoleBasedRoute>
+            </ProtectedRoute>
+          } />
           
           {/* Fallback */}
           <Route path="*" element={<Navigate to="/login" replace />} />

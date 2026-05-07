@@ -11,11 +11,10 @@ const AddPurchase = () => {
   const [activeTab, setActiveTab] = useState('add');
   const [searchTerm, setSearchTerm] = useState('');
   const [products, setProducts] = useState([]);
-  const [uniqueProducts, setUniqueProducts] = useState([]); // New state for unique products
+  const [uniqueProducts, setUniqueProducts] = useState([]);
   const [message, setMessage] = useState(null);
   
-  // New state for filtering
-  const [dateFilter, setDateFilter] = useState('all'); // all, today, yesterday, week, month, custom
+  const [dateFilter, setDateFilter] = useState('all');
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
   const [showCustomDate, setShowCustomDate] = useState(false);
@@ -37,9 +36,7 @@ const AddPurchase = () => {
     fetchPurchases();
   }, []);
 
-  // Get auth token
   const getToken = () => sessionStorage.getItem('authToken');
-
   const getAuthHeaders = () => ({
     'Content-Type': 'application/json',
     'Authorization': `Bearer ${getToken()}`
@@ -63,11 +60,18 @@ const AddPurchase = () => {
       
       const result = await response.json();
       if (result.success) {
-        setProducts(result.data);
+        // Filter only dairy products
+        const dairyOnly = result.data.filter(product => 
+          product.product_type === 'dairy' || 
+          product.is_non_dairy === false || 
+          product.is_non_dairy === 'false' || 
+          !product.is_non_dairy
+        );
+        setProducts(dairyOnly);
         
-        // Create unique products by name (remove duplicates)
+        // Create unique products by name
         const productMap = new Map();
-        result.data.forEach(product => {
+        dairyOnly.forEach(product => {
           if (!productMap.has(product.name)) {
             productMap.set(product.name, product);
           }
@@ -134,7 +138,6 @@ const AddPurchase = () => {
     return date >= start && date <= end;
   };
 
-  // Filter purchases based on selected filter
   const getFilteredPurchases = () => {
     let filtered = [...purchases];
 
@@ -158,7 +161,6 @@ const AddPurchase = () => {
         break;
     }
 
-    // Apply search filter
     if (searchTerm) {
       filtered = filtered.filter(purchase =>
         purchase.product_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -167,11 +169,9 @@ const AddPurchase = () => {
       );
     }
 
-    // Sort by date (newest first)
     return filtered.sort((a, b) => new Date(b.purchase_date) - new Date(a.purchase_date));
   };
 
-  // Handle filter change
   const handleDateFilterChange = (value) => {
     setDateFilter(value);
     setShowCustomDate(value === 'custom');
@@ -181,7 +181,6 @@ const AddPurchase = () => {
     }
   };
 
-  // Download as CSV
   const downloadCSV = () => {
     const filteredPurchases = getFilteredPurchases();
     
@@ -190,22 +189,12 @@ const AddPurchase = () => {
       return;
     }
 
-    // Define CSV headers
     const headers = [
-      'S.No',
-      'Date',
-      'Product Name',
-      'Quantity',
-      'Unit',
-      'Price Per Unit (₹)',
-      'Total Cost (₹)',
-      'Supplier/Farm',
-      'Invoice Number',
-      'Notes',
-      'Remaining Stock'
+      'S.No', 'Date', 'Product Name', 'Quantity', 'Unit',
+      'Price Per Unit (₹)', 'Total Cost (₹)', 'Supplier/Farm',
+      'Invoice Number', 'Notes', 'Remaining Stock'
     ];
 
-    // Prepare rows
     const rows = filteredPurchases.map((purchase, index) => [
       index + 1,
       new Date(purchase.purchase_date).toLocaleDateString('en-IN'),
@@ -220,16 +209,12 @@ const AddPurchase = () => {
       purchase.remaining_quantity ? `${purchase.remaining_quantity} ${purchase.unit || 'Litre'}` : 'N/A'
     ]);
 
-    // Create CSV content
     const csvContent = [
       headers.join(','),
       ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
     ].join('\n');
 
-    // Add BOM for UTF-8 encoding (handles Indian Rupee symbol)
     const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
-    
-    // Create download link
     const link = document.createElement('a');
     const url = URL.createObjectURL(blob);
     link.setAttribute('href', url);
@@ -242,7 +227,6 @@ const AddPurchase = () => {
     showMessage(`✅ Downloaded ${filteredPurchases.length} records`);
   };
 
-  // Generate print table HTML
   const generatePrintTable = (data) => {
     if (!data || data.length === 0) {
       return '<p>No data available</p>';
@@ -252,16 +236,8 @@ const AddPurchase = () => {
       <table>
         <thead>
           <tr>
-            <th>S.No</th>
-            <th>Date</th>
-            <th>Product</th>
-            <th>Quantity</th>
-            <th>Unit</th>
-            <th>Rate (₹)</th>
-            <th>Total (₹)</th>
-            <th>Supplier</th>
-            <th>Invoice No</th>
-            <th>Stock Left</th>
+            <th>S.No</th><th>Date</th><th>Product</th><th>Quantity</th><th>Unit</th>
+            <th>Rate (₹)</th><th>Total (₹)</th><th>Supplier</th><th>Invoice No</th><th>Stock Left</th>
           </tr>
         </thead>
         <tbody>
@@ -286,7 +262,6 @@ const AddPurchase = () => {
       `;
     });
     
-    // Calculate total amount only (remove rate total)
     const totalAmount = calculateTotalAmount(data);
     
     tableHtml += `
@@ -298,13 +273,12 @@ const AddPurchase = () => {
             <td colspan="3"></td>
           </tr>
         </tfoot>
-      </table>
+      </tr>
     `;
     
     return tableHtml;
   };
 
-  // Get filter label for print
   const getFilterLabel = () => {
     switch(dateFilter) {
       case 'today': return 'Today';
@@ -316,7 +290,6 @@ const AddPurchase = () => {
     }
   };
 
-  // Print table
   const printTable = () => {
     const filteredPurchases = getFilteredPurchases();
     if (filteredPurchases.length === 0) {
@@ -327,7 +300,6 @@ const AddPurchase = () => {
     const totalAmount = calculateTotalAmount(filteredPurchases);
     const totalQuantity = filteredPurchases.reduce((sum, p) => sum + (parseFloat(p.quantity) || 0), 0);
 
-    // Create a hidden iframe for printing
     const printFrame = document.createElement('iframe');
     printFrame.style.position = 'absolute';
     printFrame.style.width = '0px';
@@ -337,7 +309,6 @@ const AddPurchase = () => {
     
     const printDoc = printFrame.contentWindow.document;
     
-    // Write the content with proper styles
     printDoc.write(`
       <!DOCTYPE html>
       <html>
@@ -345,121 +316,18 @@ const AddPurchase = () => {
           <title>Purchase History Report - Saritha Dairy</title>
           <meta charset="UTF-8">
           <style>
-            * {
-              margin: 0;
-              padding: 0;
-              box-sizing: border-box;
-            }
-            
-            body {
-              font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-              padding: 20px;
-              background: white;
-              color: #333;
-            }
-            
-            .print-container {
-              max-width: 1200px;
-              margin: 0 auto;
-            }
-            
-            .header {
-              text-align: center;
-              margin-bottom: 30px;
-              padding-bottom: 20px;
-              border-bottom: 2px solid #3b82f6;
-            }
-            
-            .header h1 {
-              color: #1e293b;
-              font-size: 24px;
-              margin-bottom: 8px;
-            }
-            
-            .header .subtitle {
-              color: #64748b;
-              font-size: 14px;
-            }
-            
-            .filter-info {
-              background: #f8fafc;
-              padding: 12px 16px;
-              border-radius: 8px;
-              margin-bottom: 20px;
-              font-size: 13px;
-              border-left: 4px solid #3b82f6;
-            }
-            
-            .filter-info p {
-              margin: 4px 0;
-            }
-            
-            .stats {
-              display: flex;
-              gap: 20px;
-              margin-bottom: 25px;
-              padding: 15px;
-              background: #eff6ff;
-              border-radius: 8px;
-            }
-            
-            .stat-item {
-              flex: 1;
-              text-align: center;
-            }
-            
-            .stat-label {
-              font-size: 12px;
-              color: #475569;
-              margin-bottom: 4px;
-            }
-            
-            .stat-value {
-              font-size: 18px;
-              font-weight: bold;
-              color: #1e293b;
-            }
-            
-            table {
-              width: 100%;
-              border-collapse: collapse;
-              margin-top: 20px;
-              font-size: 12px;
-            }
-            
-            th {
-              background: #f1f5f9;
-              padding: 12px 8px;
-              text-align: left;
-              font-weight: 600;
-              color: #1e293b;
-              border: 1px solid #e2e8f0;
-            }
-            
-            td {
-              padding: 10px 8px;
-              border: 1px solid #e2e8f0;
-              vertical-align: top;
-            }
-            
-            tr:nth-child(even) {
-              background: #f8fafc;
-            }
-            
-            .footer {
-              margin-top: 30px;
-              padding-top: 20px;
-              text-align: center;
-              font-size: 11px;
-              color: #94a3b8;
-              border-top: 1px solid #e2e8f0;
-            }
-            
-            @media print {
-              body {
-                padding: 10px;
-              }
-            }
+            * { margin: 0; padding: 0; box-sizing: border-box; }
+            body { font-family: 'Segoe UI', sans-serif; padding: 20px; background: white; color: #333; }
+            .print-container { max-width: 1200px; margin: 0 auto; }
+            .header { text-align: center; margin-bottom: 30px; padding-bottom: 20px; border-bottom: 2px solid #3b82f6; }
+            .header h1 { color: #1e293b; font-size: 24px; margin-bottom: 8px; }
+            .filter-info { background: #f8fafc; padding: 12px 16px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #3b82f6; }
+            .stats { display: flex; gap: 20px; margin-bottom: 25px; padding: 15px; background: #eff6ff; border-radius: 8px; }
+            .stat-item { flex: 1; text-align: center; }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 12px; }
+            th { background: #f1f5f9; padding: 12px 8px; border: 1px solid #e2e8f0; }
+            td { padding: 10px 8px; border: 1px solid #e2e8f0; }
+            .footer { margin-top: 30px; padding-top: 20px; text-align: center; font-size: 11px; border-top: 1px solid #e2e8f0; }
           </style>
         </head>
         <body>
@@ -468,50 +336,25 @@ const AddPurchase = () => {
               <h1>🏪 Saritha Dairy - Purchase History Report</h1>
               <div class="subtitle">Farm Purchase Records</div>
             </div>
-            
             <div class="filter-info">
               <p><strong>📅 Filter Applied:</strong> ${getFilterLabel()}</p>
               <p><strong>⏰ Generated on:</strong> ${new Date().toLocaleString()}</p>
             </div>
-            
             <div class="stats">
-              <div class="stat-item">
-                <div class="stat-label">Total Purchases</div>
-                <div class="stat-value">${filteredPurchases.length}</div>
-              </div>
-              <div class="stat-item">
-                <div class="stat-label">Total Quantity</div>
-                <div class="stat-value">${totalQuantity.toFixed(2)}</div>
-              </div>
-              <div class="stat-item">
-                <div class="stat-label">Total Amount</div>
-                <div class="stat-value">₹${totalAmount.toLocaleString()}</div>
-              </div>
+              <div class="stat-item"><div class="stat-label">Total Purchases</div><div class="stat-value">${filteredPurchases.length}</div></div>
+              <div class="stat-item"><div class="stat-label">Total Quantity</div><div class="stat-value">${totalQuantity.toFixed(2)}</div></div>
+              <div class="stat-item"><div class="stat-label">Total Amount</div><div class="stat-value">₹${totalAmount.toLocaleString()}</div></div>
             </div>
-            
             ${generatePrintTable(filteredPurchases)}
-            
-            <div class="footer">
-              <p>This is a computer-generated document. No signature required.</p>
-              <p>Saritha Dairy - All Rights Reserved</p>
-            </div>
+            <div class="footer"><p>Saritha Dairy - All Rights Reserved</p></div>
           </div>
-          
-          <script>
-            window.onload = function() {
-              window.print();
-              setTimeout(function() {
-                window.close();
-              }, 500);
-            };
-          <\/script>
+          <script>window.onload = function() { window.print(); setTimeout(function() { window.close(); }, 500); };<\/script>
         </body>
       </html>
     `);
     
     printDoc.close();
     
-    // Remove iframe after printing
     setTimeout(() => {
       if (printFrame && printFrame.parentNode) {
         document.body.removeChild(printFrame);
@@ -535,6 +378,8 @@ const AddPurchase = () => {
     if (n.includes('paneer')) return '🧀';
     if (n.includes('ghee')) return '🫕';
     if (n.includes('butter')) return '🧈';
+    if (n.includes('yogurt')) return '🥄';
+    if (n.includes('cheese')) return '🧀';
     return '📦';
   };
 
@@ -568,7 +413,15 @@ const AddPurchase = () => {
   };
 
   const handleProductSelect = (e) => {
-    setFormData({ ...formData, productName: e.target.value });
+    const selectedProduct = e.target.value;
+    setFormData({ ...formData, productName: selectedProduct });
+    
+    if (selectedProduct.toLowerCase().includes('milk')) {
+      setFormData(prev => ({ ...prev, productName: selectedProduct, unit: 'Litre' }));
+    } else if (selectedProduct.toLowerCase().includes('paneer') || 
+               selectedProduct.toLowerCase().includes('cheese')) {
+      setFormData(prev => ({ ...prev, productName: selectedProduct, unit: 'Kg' }));
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -705,9 +558,11 @@ const AddPurchase = () => {
   const totalQuantity = filteredPurchases.reduce((sum, p) => sum + (parseFloat(p.quantity) || 0), 0);
   const totalRateSum = calculateTotalRate(filteredPurchases);
 
+  // Dairy products only
+  const dairyProducts = uniqueProducts;
+
   return (
     <div className="purchase-tabs-container">
-      {/* Toast Notification */}
       {message && (
         <div style={{
           position: 'fixed', top: '20px', right: '20px', zIndex: 3000,
@@ -727,7 +582,7 @@ const AddPurchase = () => {
 
       <div className="tabs-header">
         <h1>📦 Purchase Management</h1>
-        <p>Manage your farm purchases efficiently</p>
+        <p>Manage dairy farm purchases efficiently</p>
       </div>
 
       <div className="stats-tabs">
@@ -786,7 +641,7 @@ const AddPurchase = () => {
                   <label>Product <span className="required">*</span></label>
                   <select value={formData.productName} onChange={handleProductSelect} required>
                     <option value="">-- Select Product --</option>
-                    {uniqueProducts.map((p, i) => (
+                    {dairyProducts.map((p, i) => (
                       <option key={i} value={p.name}>
                         {getProductIcon(p.name)} {p.name}
                       </option>
@@ -806,6 +661,7 @@ const AddPurchase = () => {
                     <option value="Kg">Kg</option>
                     <option value="Gram">Gram</option>
                     <option value="Piece">Piece</option>
+                    <option value="ml">ml</option>
                   </select>
                 </div>
 
@@ -854,85 +710,35 @@ const AddPurchase = () => {
       {activeTab === 'history' && (
         <div className="tab-content">
           <div className="history-card-tab">
-            {/* Filter Bar */}
             <div className="filter-bar-tab">
               <div className="filter-group-tab">
                 <label>Date Filter:</label>
                 <div className="filter-buttons-tab">
-                  <button 
-                    className={`filter-btn ${dateFilter === 'all' ? 'active' : ''}`}
-                    onClick={() => handleDateFilterChange('all')}
-                  >
-                    All
-                  </button>
-                  <button 
-                    className={`filter-btn ${dateFilter === 'today' ? 'active' : ''}`}
-                    onClick={() => handleDateFilterChange('today')}
-                  >
-                    Today
-                  </button>
-                  <button 
-                    className={`filter-btn ${dateFilter === 'yesterday' ? 'active' : ''}`}
-                    onClick={() => handleDateFilterChange('yesterday')}
-                  >
-                    Yesterday
-                  </button>
-                  <button 
-                    className={`filter-btn ${dateFilter === 'week' ? 'active' : ''}`}
-                    onClick={() => handleDateFilterChange('week')}
-                  >
-                    Last 7 Days
-                  </button>
-                  <button 
-                    className={`filter-btn ${dateFilter === 'month' ? 'active' : ''}`}
-                    onClick={() => handleDateFilterChange('month')}
-                  >
-                    Last 30 Days
-                  </button>
-                  <button 
-                    className={`filter-btn ${dateFilter === 'custom' ? 'active' : ''}`}
-                    onClick={() => handleDateFilterChange('custom')}
-                  >
-                    Custom
-                  </button>
+                  <button className={`filter-btn ${dateFilter === 'all' ? 'active' : ''}`} onClick={() => handleDateFilterChange('all')}>All</button>
+                  <button className={`filter-btn ${dateFilter === 'today' ? 'active' : ''}`} onClick={() => handleDateFilterChange('today')}>Today</button>
+                  <button className={`filter-btn ${dateFilter === 'yesterday' ? 'active' : ''}`} onClick={() => handleDateFilterChange('yesterday')}>Yesterday</button>
+                  <button className={`filter-btn ${dateFilter === 'week' ? 'active' : ''}`} onClick={() => handleDateFilterChange('week')}>Last 7 Days</button>
+                  <button className={`filter-btn ${dateFilter === 'month' ? 'active' : ''}`} onClick={() => handleDateFilterChange('month')}>Last 30 Days</button>
+                  <button className={`filter-btn ${dateFilter === 'custom' ? 'active' : ''}`} onClick={() => handleDateFilterChange('custom')}>Custom</button>
                 </div>
               </div>
 
               {showCustomDate && (
                 <div className="custom-date-range-tab">
-                  <input 
-                    type="date" 
-                    value={customStartDate} 
-                    onChange={(e) => setCustomStartDate(e.target.value)}
-                    placeholder="Start Date"
-                  />
+                  <input type="date" value={customStartDate} onChange={(e) => setCustomStartDate(e.target.value)} placeholder="Start Date" />
                   <span>to</span>
-                  <input 
-                    type="date" 
-                    value={customEndDate} 
-                    onChange={(e) => setCustomEndDate(e.target.value)}
-                    placeholder="End Date"
-                  />
+                  <input type="date" value={customEndDate} onChange={(e) => setCustomEndDate(e.target.value)} placeholder="End Date" />
                 </div>
               )}
 
               <div className="search-export-tab">
                 <div className="search-wrapper-tab">
                   <span className="search-icon-tab">🔍</span>
-                  <input 
-                    type="text" 
-                    placeholder="Search by product, supplier or invoice..." 
-                    value={searchTerm} 
-                    onChange={(e) => setSearchTerm(e.target.value)} 
-                  />
+                  <input type="text" placeholder="Search by product, supplier or invoice..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
                 </div>
                 <div className="export-buttons-tab">
-                  <button className="export-btn csv-btn" onClick={downloadCSV}>
-                    📥 Download CSV
-                  </button>
-                  <button className="export-btn print-btn" onClick={printTable}>
-                    🖨️ Print
-                  </button>
+                  <button className="export-btn csv-btn" onClick={downloadCSV}>📥 Download CSV</button>
+                  <button className="export-btn print-btn" onClick={printTable}>🖨️ Print</button>
                 </div>
               </div>
             </div>
@@ -948,17 +754,8 @@ const AddPurchase = () => {
                 <table className="purchase-table-tab">
                   <thead>
                     <tr>
-                      <th>S.No</th>
-                      <th>Date</th>
-                      <th>Product</th>
-                      <th>Quantity</th>
-                      <th>Unit</th>
-                      <th>Rate (₹)</th>
-                      <th>Total (₹)</th>
-                      <th>Supplier</th>
-                      <th>Invoice</th>
-                      <th>Stock Left</th>
-                      <th>Actions</th>
+                      <th>S.No</th><th>Date</th><th>Product</th><th>Quantity</th><th>Unit</th>
+                      <th>Rate (₹)</th><th>Total (₹)</th><th>Supplier</th><th>Invoice</th><th>Stock Left</th><th>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -971,8 +768,11 @@ const AddPurchase = () => {
                           <td>{index + 1}</td>
                           <td>{new Date(purchase.purchase_date).toLocaleDateString('en-IN')}</td>
                           <td>
-                            <span className="product-badge-table">
-                              {purchase.product_name}
+                            <span className="product-badge-table" style={{ 
+                              background: '#eff6ff',
+                              borderLeft: `3px solid ${getProductColor(purchase.product_name)}`
+                            }}>
+                              {getProductIcon(purchase.product_name)} {purchase.product_name}
                             </span>
                           </td>
                           <td>{purchase.quantity}</td>
@@ -987,277 +787,19 @@ const AddPurchase = () => {
                             </span>
                           </td>
                           <td className="action-cell">
-                            <button className="edit-action-table" onClick={() => handleEdit(purchase)} title="Edit">
-                              ✏️
-                            </button>
-                            <button className="delete-action-table" onClick={() => handleDelete(purchase.id, purchase.product_name)} title="Delete">
-                              🗑️
-                            </button>
+                            <button className="edit-action-table" onClick={() => handleEdit(purchase)} title="Edit">✏️</button>
+                            <button className="delete-action-table" onClick={() => handleDelete(purchase.id, purchase.product_name)} title="Delete">🗑️</button>
                           </td>
                         </tr>
                       );
                     })}
                   </tbody>
-                  <tfoot>
-                    <tr className="table-footer-total">
-                    </tr>
-                  </tfoot>
                 </table>
               </div>
             )}
           </div>
         </div>
       )}
-
-      <style>{`
-        @keyframes slideInRight {
-          from { transform: translateX(100%); opacity: 0; }
-          to { transform: translateX(0); opacity: 1; }
-        }
-
-        /* Filter Bar Styles */
-        .filter-bar-tab {
-          background: white;
-          border-radius: 16px;
-          padding: 20px;
-          margin-bottom: 20px;
-          box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-        }
-
-        .filter-group-tab {
-          margin-bottom: 15px;
-        }
-
-        .filter-group-tab label {
-          font-weight: 600;
-          color: #333;
-          margin-right: 15px;
-        }
-
-        .filter-buttons-tab {
-          display: inline-flex;
-          gap: 8px;
-          flex-wrap: wrap;
-        }
-
-        .filter-btn {
-          padding: 6px 14px;
-          border: 1px solid #e2e8f0;
-          background: white;
-          border-radius: 20px;
-          cursor: pointer;
-          font-size: 13px;
-          transition: all 0.2s;
-        }
-
-        .filter-btn:hover {
-          border-color: #3b82f6;
-          color: #3b82f6;
-        }
-
-        .filter-btn.active {
-          background: #3b82f6;
-          color: white;
-          border-color: #3b82f6;
-        }
-
-        .custom-date-range-tab {
-          display: flex;
-          gap: 12px;
-          align-items: center;
-          margin-bottom: 15px;
-          padding: 10px 0;
-        }
-
-        .custom-date-range-tab input {
-          padding: 8px 12px;
-          border: 1px solid #e2e8f0;
-          border-radius: 8px;
-          font-size: 14px;
-        }
-
-        .search-export-tab {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          flex-wrap: wrap;
-          gap: 15px;
-          margin-top: 10px;
-        }
-
-        .search-wrapper-tab {
-          flex: 1;
-          position: relative;
-          max-width: 300px;
-        }
-
-        .search-wrapper-tab input {
-          width: 100%;
-          padding: 10px 15px 10px 38px;
-          border: 1px solid #e2e8f0;
-          border-radius: 10px;
-          font-size: 14px;
-        }
-
-        .search-icon-tab {
-          position: absolute;
-          left: 12px;
-          top: 50%;
-          transform: translateY(-50%);
-          font-size: 16px;
-        }
-
-        .export-buttons-tab {
-          display: flex;
-          gap: 10px;
-        }
-
-        .export-btn {
-          padding: 8px 16px;
-          border: none;
-          border-radius: 8px;
-          cursor: pointer;
-          font-weight: 500;
-          transition: all 0.2s;
-        }
-
-        .csv-btn {
-          background: #10b981;
-          color: white;
-        }
-
-        .csv-btn:hover {
-          background: #059669;
-        }
-
-        .print-btn {
-          background: #6366f1;
-          color: white;
-        }
-
-        .print-btn:hover {
-          background: #4f46e5;
-        }
-
-        /* Table Styles */
-        .table-responsive-tab {
-          overflow-x: auto;
-          border-radius: 16px;
-          background: white;
-        }
-
-        .purchase-table-tab {
-          width: 100%;
-          border-collapse: collapse;
-          font-size: 14px;
-        }
-
-        .purchase-table-tab th {
-          background: #f1f5f9;
-          padding: 14px 12px;
-          text-align: left;
-          font-weight: 600;
-          color: #1e293b;
-          border-bottom: 2px solid #e2e8f0;
-        }
-
-        .purchase-table-tab td {
-          padding: 12px;
-          border-bottom: 1px solid #e2e8f0;
-          vertical-align: middle;
-        }
-
-        .purchase-table-tab tr:hover {
-          background: #f8fafc;
-        }
-
-        .product-badge-table {
-          display: inline-block;
-          padding: 4px 10px;
-          border-radius: 12px;
-          font-size: 13px;
-          font-weight: 500;
-        }
-
-        .total-cell {
-          font-weight: 600;
-          color: #059669;
-        }
-
-        .stock-badge {
-          display: inline-block;
-          padding: 4px 10px;
-          border-radius: 20px;
-          font-size: 12px;
-          font-weight: 500;
-        }
-
-        .stock-badge.available {
-          background: #dbeafe;
-          color: #1e40af;
-        }
-
-        .stock-badge.low {
-          background: #fed7aa;
-          color: #9a3412;
-        }
-
-        .stock-badge.finished {
-          background: #dcfce7;
-          color: #166534;
-        }
-
-        .action-cell {
-          display: flex;
-          gap: 8px;
-        }
-
-        .edit-action-table, .delete-action-table {
-          background: none;
-          border: none;
-          cursor: pointer;
-          font-size: 18px;
-          padding: 4px 8px;
-          border-radius: 8px;
-          transition: all 0.2s;
-        }
-
-        .edit-action-table:hover {
-          background: #dbeafe;
-        }
-
-        .delete-action-table:hover {
-          background: #fee2e2;
-        }
-
-        .table-footer-total {
-          background: #f8fafc;
-          font-weight: 600;
-        }
-
-        .table-footer-total td {
-          border-top: 2px solid #e2e8f0;
-        }
-
-        @media (max-width: 768px) {
-          .filter-buttons-tab {
-            margin-top: 10px;
-          }
-          
-          .search-export-tab {
-            flex-direction: column;
-            align-items: stretch;
-          }
-          
-          .search-wrapper-tab {
-            max-width: 100%;
-          }
-          
-          .export-buttons-tab {
-            justify-content: flex-end;
-          }
-        }
-      `}</style>
     </div>
   );
 };

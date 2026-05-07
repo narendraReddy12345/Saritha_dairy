@@ -4,15 +4,12 @@ import { useNavigate } from 'react-router-dom';
 import './Dashboard.css';
 
 const API_URL = 'https://saritha-dairy-api.onrender.com/api';
+const BASE_URL = 'https://saritha-dairy-api.onrender.com';
 
 const Dashboard = () => {
   const navigate = useNavigate();
   const [dashboardData, setDashboardData] = useState({
-    products: [],
-    totalInvestment: 0,
-    totalRevenue: 0,
-    totalProfit: 0,
-    overallProfitMargin: 0
+    products: [], totalInvestment: 0, totalRevenue: 0, totalProfit: 0, overallProfitMargin: 0
   });
   const [loading, setLoading] = useState(true);
   const [selectedProduct, setSelectedProduct] = useState(null);
@@ -21,28 +18,29 @@ const Dashboard = () => {
   const [userName, setUserName] = useState('Admin');
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('all');
+  const [hoveredProduct, setHoveredProduct] = useState(null);
 
   useEffect(() => {
     fetchDashboardData();
-    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    const timer = setInterval(() => setCurrentTime(new Date()), 60000);
     const hour = new Date().getHours();
     if (hour < 12) setGreeting('Good Morning');
     else if (hour < 18) setGreeting('Good Afternoon');
     else setGreeting('Good Evening');
-    
     const user = sessionStorage.getItem('userName');
     if (user) setUserName(user);
-    
     return () => clearInterval(timer);
   }, []);
 
-  // Get auth token
   const getToken = () => sessionStorage.getItem('authToken');
+  const getAuthHeaders = () => ({ 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` });
 
-  const getAuthHeaders = () => ({
-    'Content-Type': 'application/json',
-    'Authorization': `Bearer ${getToken()}`
-  });
+  const getImageUrl = (url) => {
+    if (!url) return null;
+    if (url.startsWith('http')) return url;
+    if (url.startsWith('/')) return `${BASE_URL}${url}`;
+    return `${BASE_URL}/${url}`;
+  };
 
   const fetchDashboardData = async () => {
     try {
@@ -52,12 +50,7 @@ const Dashboard = () => {
         fetch(`${API_URL}/sales-history`, { headers: getAuthHeaders() }),
         fetch(`${API_URL}/store-stock`, { headers: getAuthHeaders() })
       ]);
-
-      // Check for 401
-      if ([productsRes, purchasesRes, salesRes, stockRes].some(r => r.status === 401)) {
-        window.location.href = '/login';
-        return;
-      }
+      if ([productsRes, purchasesRes, salesRes, stockRes].some(r => r.status === 401)) { window.location.href = '/login'; return; }
 
       const productsData = await productsRes.json();
       const purchasesData = await purchasesRes.json();
@@ -65,490 +58,211 @@ const Dashboard = () => {
       const stockData = await stockRes.json();
 
       if (productsData.success) {
-        // Group products by name to remove duplicates
         const productMap = new Map();
-        
         productsData.data.forEach(product => {
           if (!productMap.has(product.name)) {
             productMap.set(product.name, {
-              id: product.id,
-              name: product.name,
-              image: product.image_url,
-              packs: typeof product.packs === 'string' ? JSON.parse(product.packs) : product.packs,
-              variants: []
+              id: product.id, name: product.name, image_url: product.image_url,
+              packs: typeof product.packs === 'string' ? JSON.parse(product.packs) : product.packs, variants: []
             });
           }
-          // Store all variants for this product
-          productMap.get(product.name).variants.push({
-            id: product.id,
-            packs: typeof product.packs === 'string' ? JSON.parse(product.packs) : product.packs
-          });
+          productMap.get(product.name).variants.push({ id: product.id, packs: typeof product.packs === 'string' ? JSON.parse(product.packs) : product.packs });
         });
-        
-        // Calculate aggregated data for each unique product
+
         const productWiseData = Array.from(productMap.values()).map(product => {
-          // Get all purchases for this product name
           const productPurchases = purchasesData.data?.filter(p => p.product_name === product.name) || [];
-          const totalInvestment = productPurchases.reduce((sum, p) => sum + (parseFloat(p.total_cost) || 0), 0);
-          const totalQuantityPurchased = productPurchases.reduce((sum, p) => sum + (parseFloat(p.quantity) || 0), 0);
-          
-          let totalRevenue = 0;
-          let totalSoldQuantity = 0;
-          if (salesData.success) {
-            salesData.data.forEach(sale => {
-              if (sale.items) {
-                sale.items.forEach(item => {
-                  if (item.product_name === product.name) {
-                    totalRevenue += parseFloat(item.total) || 0;
-                    totalSoldQuantity += item.quantity || 0;
-                  }
-                });
-              }
-            });
-          }
-          
-          // Get current stock for this product
+          const totalInvestment = productPurchases.reduce((s, p) => s + (parseFloat(p.total_cost) || 0), 0);
+          const totalQtyPurchased = productPurchases.reduce((s, p) => s + (parseFloat(p.quantity) || 0), 0);
+          let totalRevenue = 0, totalSoldQty = 0;
+          if (salesData.success) salesData.data.forEach(sale => { if (sale.items) sale.items.forEach(item => { if (item.product_name === product.name) { totalRevenue += parseFloat(item.total) || 0; totalSoldQty += item.quantity || 0; } }); });
           const currentStock = stockData.data?.filter(s => s.product_name === product.name) || [];
-          const currentStockQuantity = currentStock.reduce((sum, s) => sum + s.quantity, 0);
-          
+          const currentStockQty = currentStock.reduce((s, st) => s + st.quantity, 0);
           const profit = totalRevenue - totalInvestment;
           const profitMargin = totalInvestment > 0 ? (profit / totalInvestment) * 100 : 0;
-          
-          // Combine all packs/variants
           const allPacks = [];
-          product.variants.forEach(variant => {
-            if (variant.packs && Array.isArray(variant.packs)) {
-              variant.packs.forEach(pack => {
-                if (!allPacks.some(p => p.size === pack.size && p.unit === pack.unit)) {
-                  allPacks.push(pack);
-                }
-              });
-            }
-          });
-          
-          return {
-            id: product.id,
-            name: product.name,
-            image: product.image,
-            packs: allPacks,
-            totalInvestment,
-            totalRevenue,
-            profit,
-            profitMargin,
-            totalQuantityPurchased,
-            totalSoldQuantity,
-            currentStockQuantity,
-            remainingStock: totalQuantityPurchased - totalSoldQuantity
-          };
+          product.variants.forEach(v => { if (v.packs && Array.isArray(v.packs)) v.packs.forEach(p => { if (!allPacks.some(x => x.size === p.size && x.unit === p.unit)) allPacks.push(p); }); });
+          return { id: product.id, name: product.name, imageUrl: getImageUrl(product.image_url), packs: allPacks, totalInvestment, totalRevenue, profit, profitMargin, totalQuantityPurchased: totalQtyPurchased, totalSoldQuantity: totalSoldQty, currentStockQuantity: currentStockQty, remainingStock: totalQtyPurchased - totalSoldQty };
         });
-        
-        const totalInvestment = productWiseData.reduce((sum, p) => sum + p.totalInvestment, 0);
-        const totalRevenue = productWiseData.reduce((sum, p) => sum + p.totalRevenue, 0);
-        const totalProfit = totalRevenue - totalInvestment;
-        const overallProfitMargin = totalInvestment > 0 ? (totalProfit / totalInvestment) * 100 : 0;
-        
-        setDashboardData({
-          products: productWiseData,
-          totalInvestment,
-          totalRevenue,
-          totalProfit,
-          overallProfitMargin
-        });
+
+        const totInv = productWiseData.reduce((s, p) => s + p.totalInvestment, 0);
+        const totRev = productWiseData.reduce((s, p) => s + p.totalRevenue, 0);
+        const totProf = totRev - totInv;
+        const totMargin = totInv > 0 ? (totProf / totInv) * 100 : 0;
+        setDashboardData({ products: productWiseData, totalInvestment: totInv, totalRevenue: totRev, totalProfit: totProf, overallProfitMargin: totMargin });
       }
-    } catch (error) {
-      console.error('Error:', error);
-    }
+    } catch (e) { console.error(e); }
     setLoading(false);
   };
 
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0
-    }).format(amount);
+  const formatCurrency = (a) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(a);
+
+  const getStockLevel = (cur, max) => {
+    const pct = max > 0 ? (cur / max) * 100 : 0;
+    if (pct <= 20) return { level: 'Critical', color: '#ef4444', bg: '#fef2f2', grad: 'linear-gradient(135deg,#fef2f2,#fee2e2)' };
+    if (pct <= 50) return { level: 'Low', color: '#f59e0b', bg: '#fffbeb', grad: 'linear-gradient(135deg,#fffbeb,#fef3c7)' };
+    if (pct <= 80) return { level: 'Medium', color: '#3b82f6', bg: '#eff6ff', grad: 'linear-gradient(135deg,#eff6ff,#dbeafe)' };
+    return { level: 'Good', color: '#10b981', bg: '#f0fdf4', grad: 'linear-gradient(135deg,#f0fdf4,#dcfce7)' };
   };
 
-  const getStockLevel = (current, max) => {
-    const percentage = max > 0 ? (current / max) * 100 : 0;
-    if (percentage <= 20) return { level: 'Critical', color: '#ef4444', bg: '#fef2f2', icon: '🔴' };
-    if (percentage <= 50) return { level: 'Low', color: '#f59e0b', bg: '#fffbeb', icon: '🟠' };
-    if (percentage <= 80) return { level: 'Medium', color: '#3b82f6', bg: '#eff6ff', icon: '🔵' };
-    return { level: 'Good', color: '#10b981', bg: '#f0fdf4', icon: '🟢' };
-  };
+  const getProductIcon = (n) => { if(!n)return'📦'; const x=n.toLowerCase(); if(x.includes('milk'))return'🥛'; if(x.includes('curd'))return'🥄'; if(x.includes('paneer'))return'🧀'; if(x.includes('ghee'))return'🫕'; if(x.includes('butter'))return'🧈'; return'📦'; };
 
-  const getProductIcon = (name) => {
-    if (!name) return '📦';
-    const n = name.toLowerCase();
-    if (n.includes('milk')) return '🥛';
-    if (n.includes('curd')) return '🥄';
-    if (n.includes('paneer')) return '🧀';
-    if (n.includes('ghee')) return '🫕';
-    if (n.includes('butter')) return '🧈';
-    return '📦';
-  };
+  // Get top products by revenue
+  const topProductsByRevenue = [...dashboardData.products]
+    .sort((a, b) => b.totalRevenue - a.totalRevenue)
+    .slice(0, 5);
 
-  // Filter products
-  const getFilteredProducts = () => {
-    let filtered = [...dashboardData.products];
-    
-    if (searchTerm) {
-      filtered = filtered.filter(p => 
-        p.name.toLowerCase().includes(searchTerm.toLowerCase())
-      );
-    }
-    
-    if (filterType === 'profit') {
-      filtered = filtered.filter(p => p.profit > 0);
-    } else if (filterType === 'loss') {
-      filtered = filtered.filter(p => p.profit < 0);
-    } else if (filterType === 'low-stock') {
-      filtered = filtered.filter(p => {
-        const percentage = p.currentStockQuantity / Math.max(p.totalQuantityPurchased, 1) * 100;
-        return percentage <= 30;
-      });
-    }
-    
-    return filtered;
-  };
+  const filteredProducts = (() => {
+    let f = [...dashboardData.products];
+    if (searchTerm) f = f.filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase()));
+    if (filterType === 'profit') f = f.filter(p => p.profit > 0);
+    else if (filterType === 'loss') f = f.filter(p => p.profit < 0);
+    else if (filterType === 'low-stock') f = f.filter(p => (p.currentStockQuantity / Math.max(p.totalQuantityPurchased, 1)) * 100 <= 30);
+    return f;
+  })();
 
-  const filteredProducts = getFilteredProducts();
+  if (loading) return <div className="dash-load"><div className="dash-spin"></div><p>Loading dashboard...</p></div>;
 
   return (
-    <div className="compact-dashboard">
+    <div className="dash-wrap">
       {/* Header */}
-      <div className="compact-header">
-        <div className="header-title">
-          <span className="header-icon">📊</span>
-          <div>
-            <h1>Dashboard</h1>
-            <p>{greeting}, {userName}</p>
-          </div>
+      <div className="dash-hdr">
+        <div>
+          <span className="dash-hdr-greet">{greeting}, {userName} 👋</span>
+          <h1>📊 Business Overview</h1>
         </div>
-        <div className="header-right">
-          <div className="header-time">
-            <span className="time-icon">⏰</span>
-            <div>
-              <div className="time">{currentTime.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</div>
-              <div className="date">{currentTime.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Search and Filter Bar */}
-      <div className="filter-section">
-        <div className="search-bar">
-          <span className="search-icon">🔍</span>
-          <input 
-            type="text" 
-            placeholder="Search products..." 
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
-          {searchTerm && (
-            <button className="clear-search" onClick={() => setSearchTerm('')}>✕</button>
-          )}
-        </div>
-        <div className="filter-chips">
-          <button 
-            className={`filter-chip ${filterType === 'all' ? 'active' : ''}`}
-            onClick={() => setFilterType('all')}
-          >
-            All Products
-          </button>
-          <button 
-            className={`filter-chip ${filterType === 'profit' ? 'active' : ''}`}
-            onClick={() => setFilterType('profit')}
-          >
-            📈 Profitable
-          </button>
-          <button 
-            className={`filter-chip ${filterType === 'loss' ? 'active' : ''}`}
-            onClick={() => setFilterType('loss')}
-          >
-            📉 In Loss
-          </button>
-          <button 
-            className={`filter-chip ${filterType === 'low-stock' ? 'active' : ''}`}
-            onClick={() => setFilterType('low-stock')}
-          >
-            ⚠️ Low Stock
-          </button>
+        <div className="dash-hdr-time">
+          <span>{currentTime.toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'short'})}</span>
+          <span>{currentTime.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})}</span>
         </div>
       </div>
 
       {/* Stats Cards */}
-      <div className="stats-row">
-        <div className="mini-card">
-          <div className="mini-card-icon">💰</div>
+      <div className="dash-stats">
+        <div className="dash-stat">
+          <span className="dash-stat-icon" style={{background:'#eff6ff'}}>💰</span>
           <div>
-            <div className="mini-card-value">{formatCurrency(dashboardData.totalInvestment)}</div>
-            <div className="mini-card-label">Total Investment</div>
+            <strong>{formatCurrency(dashboardData.totalInvestment)}</strong>
+            <small>Total Investment</small>
           </div>
         </div>
-        <div className="mini-card">
-          <div className="mini-card-icon">📈</div>
+        <div className="dash-stat">
+          <span className="dash-stat-icon" style={{background:'#f0fdf4'}}>📈</span>
           <div>
-            <div className="mini-card-value">{formatCurrency(dashboardData.totalRevenue)}</div>
-            <div className="mini-card-label">Total Revenue</div>
+            <strong>{formatCurrency(dashboardData.totalRevenue)}</strong>
+            <small>Total Revenue</small>
           </div>
         </div>
-        <div className="mini-card">
-          <div className="mini-card-icon">🎯</div>
+        <div className="dash-stat">
+          <span className="dash-stat-icon" style={{background:dashboardData.totalProfit>=0?'#f0fdf4':'#fef2f2'}}>🎯</span>
           <div>
-            <div className="mini-card-value" style={{ color: dashboardData.totalProfit >= 0 ? '#10b981' : '#ef4444' }}>
-              {formatCurrency(dashboardData.totalProfit)}
-            </div>
-            <div className="mini-card-label">Total Profit</div>
+            <strong style={{color:dashboardData.totalProfit>=0?'#10b981':'#ef4444'}}>{formatCurrency(dashboardData.totalProfit)}</strong>
+            <small>Total Profit</small>
           </div>
-          <div className="mini-badge" style={{ background: dashboardData.totalProfit >= 0 ? '#10b981' : '#ef4444' }}>
-            {dashboardData.overallProfitMargin >= 0 ? '+' : ''}{dashboardData.overallProfitMargin.toFixed(1)}%
+        </div>
+        <div className="dash-stat">
+          <span className="dash-stat-icon" style={{background:'#faf5ff'}}>📊</span>
+          <div>
+            <strong style={{color:dashboardData.overallProfitMargin>=0?'#8b5cf6':'#ef4444'}}>{dashboardData.overallProfitMargin.toFixed(1)}%</strong>
+            <small>Profit Margin</small>
           </div>
+        </div>
+      </div>
+
+     
+
+      {/* Search and Filter Toolbar */}
+      <div className="dash-tool">
+        <div className="dash-search">
+          <span>🔍</span>
+          <input 
+            type="text" 
+            placeholder="Search products..." 
+            value={searchTerm} 
+            onChange={e=>setSearchTerm(e.target.value)}
+          />
+          {searchTerm && <button onClick={()=>setSearchTerm('')}>×</button>}
+        </div>
+        <div className="dash-filters">
+          <button className={`dash-fbtn ${filterType==='all'?'active':''}`} onClick={()=>setFilterType('all')}>All</button>
+          <button className={`dash-fbtn ${filterType==='profit'?'active':''}`} onClick={()=>setFilterType('profit')}>📈 Profitable</button>
+          <button className={`dash-fbtn ${filterType==='loss'?'active':''}`} onClick={()=>setFilterType('loss')}>📉 Loss</button>
+          <button className={`dash-fbtn ${filterType==='low-stock'?'active':''}`} onClick={()=>setFilterType('low-stock')}>⚠️ Low Stock</button>
         </div>
       </div>
 
       {/* Products Grid */}
-      {loading ? (
-        <div className="loading-compact">Loading...</div>
-      ) : (
-        <>
-          {filteredProducts.length === 0 ? (
-            <div className="empty-state">
-              <div className="empty-icon">🔍</div>
-              <h3>No products found</h3>
-              <p>Try adjusting your search or filter</p>
-            </div>
-          ) : (
-            <div className="products-compact-grid">
-              {filteredProducts.map((product, idx) => {
-                const stockLevel = getStockLevel(product.currentStockQuantity, product.totalQuantityPurchased);
-                
-                return (
-                  <div key={idx} className={`product-compact-card ${selectedProduct?.id === product.id ? 'expanded' : ''}`}>
-                    <div className="card-header" onClick={() => setSelectedProduct(selectedProduct?.id === product.id ? null : product)}>
-                      <div className="card-icon">
-                        {product.image ? (
-                          <img src={`${API_URL.replace('/api', '')}${product.image}`} alt={product.name} />
-                        ) : (
-                          <span>{getProductIcon(product.name)}</span>
-                        )}
-                      </div>
-                      <div className="card-info">
-                        <h4>{product.name}</h4>
-                        <div className="card-stats">
-                          <span className="stock-badge" style={{ background: stockLevel.bg, color: stockLevel.color }}>
-                            {stockLevel.icon} {stockLevel.level}
-                          </span>
-                          <span className="stock-qty">{product.currentStockQuantity} units</span>
-                        </div>
-                      </div>
-                      <div className={`profit-chip ${product.profit >= 0 ? 'positive' : 'negative'}`}>
-                        {product.profit >= 0 ? '▲' : '▼'} {Math.abs(product.profitMargin).toFixed(0)}%
-                      </div>
+      <div className="dash-grid">
+        {filteredProducts.length===0 ? (
+          <div className="dash-empty">
+            <span>📦</span>
+            <p>No products found</p>
+          </div>
+        ) : (
+          filteredProducts.map((product, idx) => {
+            const sl = getStockLevel(product.currentStockQuantity, product.totalQuantityPurchased);
+            const stockPct = Math.round((product.currentStockQuantity/Math.max(product.totalQuantityPurchased,1))*100);
+            const isExp = selectedProduct?.id === product.id;
+            return (
+              <div key={idx} className={`dash-card ${isExp?'expanded':''}`}>
+                <div className="dash-card-main" onClick={()=>setSelectedProduct(isExp?null:product)}>
+                  <div className="dash-card-img" style={{background:sl.grad}}>
+                    {product.imageUrl ? (
+                      <img src={product.imageUrl} alt={product.name} onError={e=>{e.target.style.display='none';e.target.nextSibling.style.display='flex';}}/>
+                    ) : null}
+                    <span className="dash-card-emoji" style={{display:product.imageUrl?'none':'flex'}}>{getProductIcon(product.name)}</span>
+                    <div className="dash-card-stock-badge" style={{background:sl.bg,color:sl.color}}>{sl.level}</div>
+                  </div>
+                  <div className="dash-card-body">
+                    <h4>{product.name}</h4>
+                    <div className="dash-card-fin">
+                      <div><small>Investment</small> {formatCurrency(product.totalInvestment)}</div>
+                      <div><small>Revenue</small> {formatCurrency(product.totalRevenue)}</div>
+                      <div style={{color:product.profit>=0?'#10b981':'#ef4444'}}><small>Profit</small> {formatCurrency(product.profit)}</div>
                     </div>
-
-                    {/* Financial Row */}
-                    <div className="financial-row">
-                      <div className="financial-col">
-                        <span>Investment</span>
-                        <strong>{formatCurrency(product.totalInvestment)}</strong>
-                      </div>
-                      <div className="financial-col">
-                        <span>Revenue</span>
-                        <strong>{formatCurrency(product.totalRevenue)}</strong>
-                      </div>
-                      <div className="financial-col">
-                        <span>Profit</span>
-                        <strong style={{ color: product.profit >= 0 ? '#10b981' : '#ef4444' }}>
-                          {formatCurrency(product.profit)}
-                        </strong>
-                      </div>
+                    <div className="dash-card-profit" style={{background:product.profit>=0?'#f0fdf4':'#fef2f2',color:product.profit>=0?'#10b981':'#ef4444'}}>
+                      {product.profit>=0?'▲':'▼'} {Math.abs(product.profitMargin).toFixed(0)}%
                     </div>
-
-                    {/* Stock Bar */}
-                    <div className="stock-bar-mini">
-                      <div className="stock-bar-bg">
-                        <div 
-                          className="stock-bar-fill" 
-                          style={{ 
-                            width: `${(product.currentStockQuantity / Math.max(product.totalQuantityPurchased, 1)) * 100}%`,
-                            background: stockLevel.color
-                          }}
-                        ></div>
-                      </div>
-                      <div className="stock-bar-labels">
-                        <span>Sold: {product.totalSoldQuantity}</span>
-                        <span>Left: {product.currentStockQuantity}</span>
-                      </div>
+                  </div>
+                </div>
+                <div className="dash-card-bar">
+                  <div className="dash-card-bar-bg">
+                    <div className="dash-card-bar-fill" style={{width:`${stockPct}%`,background:sl.color}}></div>
+                  </div>
+                  <div className="dash-card-bar-lbl">
+                    <span>Stock: {product.currentStockQuantity} units</span>
+                    <span>Sold: {product.totalSoldQuantity} units</span>
+                  </div>
+                </div>
+                {isExp && (
+                  <div className="dash-card-detail">
+                    <div className="dash-card-detail-grid">
+                      <div><span>Total Purchased</span><strong>{product.totalQuantityPurchased} units</strong></div>
+                      <div><span>Total Sold</span><strong>{product.totalSoldQuantity} units</strong></div>
+                      <div><span>Remaining Stock</span><strong>{product.remainingStock} units</strong></div>
+                      <div><span>Profit Margin</span><strong style={{color:product.profit>=0?'#10b981':'#ef4444'}}>{product.profitMargin.toFixed(1)}%</strong></div>
                     </div>
-
-                    {/* Expanded Details */}
-                    {selectedProduct?.id === product.id && (
-                      <div className="card-expanded">
-                        <div className="expanded-row">
-                          <div className="expanded-item">
-                            <span>Total Purchased</span>
-                            <strong>{product.totalQuantityPurchased} units</strong>
-                          </div>
-                          <div className="expanded-item">
-                            <span>Total Sold</span>
-                            <strong>{product.totalSoldQuantity} units</strong>
-                          </div>
-                          <div className="expanded-item">
-                            <span>Remaining Stock</span>
-                            <strong>{product.remainingStock} units</strong>
-                          </div>
-                          <div className="expanded-item">
-                            <span>Profit Margin</span>
-                            <strong style={{ color: product.profit >= 0 ? '#10b981' : '#ef4444' }}>
-                              {product.profitMargin.toFixed(2)}%
-                            </strong>
-                          </div>
-                        </div>
-                        {product.packs && product.packs.length > 0 && (
-                          <div className="expanded-packs">
-                            <span className="packs-label">Available Packs:</span>
-                            <div className="packs-list">
-                              {product.packs.map((pack, i) => (
-                                <span key={i} className="pack-tag">{pack.size}{pack.unit} - ₹{pack.price}</span>
-                              ))}
-                            </div>
-                          </div>
-                        )}
+                    {product.packs?.length>0 && (
+                      <div className="dash-card-packs">
+                        {product.packs.map((p,i)=>(
+                          <span key={i}>{p.size}{p.unit} - ₹{p.price}</span>
+                        ))}
                       </div>
                     )}
                   </div>
-                );
-              })}
-            </div>
-          )}
-        </>
-      )}
-
-      {/* Quick Actions */}
-      <div className="quick-actions-bar">
-        <button onClick={() => navigate('/purchases/add')}>➕ Add Purchase</button>
-        <button onClick={() => navigate('/inventory/pack-products')}>📦 Pack Products</button>
-        <button onClick={() => navigate('/sales')}>🛒 Make Sale</button>
-        <button onClick={() => navigate('/inventory/products')}>📋 Manage Products</button>
+                )}
+              </div>
+            );
+          })
+        )}
       </div>
 
-      <style>{`
-        .filter-section {
-          background: white;
-          border-radius: 16px;
-          padding: 15px 20px;
-          margin-bottom: 20px;
-          box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-        }
-        
-        .search-bar {
-          position: relative;
-          margin-bottom: 15px;
-        }
-        
-        .search-bar input {
-          width: 100%;
-          padding: 10px 15px 10px 40px;
-          border: 1px solid #e2e8f0;
-          border-radius: 10px;
-          font-size: 14px;
-        }
-        
-        .search-icon {
-          position: absolute;
-          left: 12px;
-          top: 50%;
-          transform: translateY(-50%);
-          font-size: 16px;
-          color: #94a3b8;
-        }
-        
-        .clear-search {
-          position: absolute;
-          right: 12px;
-          top: 50%;
-          transform: translateY(-50%);
-          background: none;
-          border: none;
-          cursor: pointer;
-          font-size: 14px;
-          color: #94a3b8;
-        }
-        
-        .filter-chips {
-          display: flex;
-          gap: 10px;
-          flex-wrap: wrap;
-        }
-        
-        .filter-chip {
-          padding: 6px 14px;
-          border: 1px solid #e2e8f0;
-          background: white;
-          border-radius: 20px;
-          cursor: pointer;
-          font-size: 13px;
-          transition: all 0.2s;
-        }
-        
-        .filter-chip:hover {
-          border-color: #3b82f6;
-          color: #3b82f6;
-        }
-        
-        .filter-chip.active {
-          background: #3b82f6;
-          color: white;
-          border-color: #3b82f6;
-        }
-        
-        .header-right {
-          display: flex;
-          align-items: center;
-          gap: 20px;
-        }
-        
-        .empty-state {
-          text-align: center;
-          padding: 60px 20px;
-          background: white;
-          border-radius: 16px;
-        }
-        
-        .empty-icon {
-          font-size: 64px;
-          margin-bottom: 20px;
-        }
-        
-        .empty-state h3 {
-          margin: 0 0 10px 0;
-          color: #1e293b;
-        }
-        
-        .empty-state p {
-          color: #64748b;
-        }
-        
-        .packs-label {
-          font-size: 12px;
-          color: #64748b;
-          display: block;
-          margin-bottom: 8px;
-        }
-        
-        .packs-list {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 8px;
-        }
-        
-        .expanded-item strong {
-          font-size: 16px;
-        }
-      `}</style>
+      {/* Quick Actions */}
+      <div className="dash-actions">
+        <button onClick={()=>navigate('/purchases/add')}><span>➕</span> Add Purchase</button>
+        <button onClick={()=>navigate('/inventory/pack-products')}><span>📦</span> Pack Products</button>
+        <button onClick={()=>navigate('/sales')}><span>🛒</span> New Sale</button>
+        <button onClick={()=>navigate('/inventory/products')}><span>📋</span> Manage Products</button>
+      </div>
     </div>
   );
 };
