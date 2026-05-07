@@ -271,60 +271,60 @@ const createAllTables = async () => {
       END;
       $$ language 'plpgsql';
     `);
-    // Add this to your createAllTables function after the other tables
 
-// NEW: Standalone Non-Dairy Items table (completely independent)
-await client.query(`
-  CREATE TABLE IF NOT EXISTS non_dairy_items (
-    id SERIAL PRIMARY KEY,
-    name VARCHAR(200) NOT NULL,
-    pack_size VARCHAR(50),
-    pack_unit VARCHAR(20) DEFAULT 'piece',
-    selling_price DECIMAL(10,2) NOT NULL,
-    purchase_price DECIMAL(10,2) NOT NULL,
-    quantity INTEGER NOT NULL DEFAULT 0,
-    supplier VARCHAR(200),
-    notes TEXT,
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW()
-  )
-`);
+    // ✅ UPDATED: Standalone Non-Dairy Items table (with image_url column)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS non_dairy_items (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(200) NOT NULL,
+        pack_size VARCHAR(50),
+        pack_unit VARCHAR(20) DEFAULT 'piece',
+        selling_price DECIMAL(10,2) NOT NULL,
+        purchase_price DECIMAL(10,2) DEFAULT 0,
+        quantity INTEGER NOT NULL DEFAULT 0,
+        image_url VARCHAR(500),
+        supplier VARCHAR(200),
+        notes TEXT,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
 
-// Create purchase history table for non-dairy items
-await client.query(`
-  CREATE TABLE IF NOT EXISTS non_dairy_purchase_history (
-    id SERIAL PRIMARY KEY,
-    product_id INTEGER REFERENCES non_dairy_items(id) ON DELETE CASCADE,
-    product_name VARCHAR(200) NOT NULL,
-    quantity INTEGER NOT NULL,
-    purchase_price DECIMAL(10,2) NOT NULL,
-    total_cost DECIMAL(10,2) NOT NULL,
-    supplier VARCHAR(200),
-    invoice_number VARCHAR(100),
-    transaction_type VARCHAR(50) DEFAULT 'additional_stock', -- 'initial_stock', 'additional_stock'
-    notes TEXT,
-    created_at TIMESTAMP DEFAULT NOW()
-  )
-`);
+    // Create purchase history table for non-dairy items
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS non_dairy_purchase_history (
+        id SERIAL PRIMARY KEY,
+        product_id INTEGER REFERENCES non_dairy_items(id) ON DELETE CASCADE,
+        product_name VARCHAR(200) NOT NULL,
+        quantity INTEGER NOT NULL,
+        purchase_price DECIMAL(10,2) NOT NULL,
+        total_cost DECIMAL(10,2) NOT NULL,
+        supplier VARCHAR(200),
+        invoice_number VARCHAR(100),
+        transaction_type VARCHAR(50) DEFAULT 'additional_stock',
+        notes TEXT,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
 
-// Add indexes
-await client.query(`
-  CREATE INDEX IF NOT EXISTS idx_non_dairy_items_name 
-  ON non_dairy_items(name)
-`);
+    // Add indexes
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_non_dairy_items_name 
+      ON non_dairy_items(name)
+    `);
 
-await client.query(`
-  CREATE INDEX IF NOT EXISTS idx_non_dairy_purchase_history_product 
-  ON non_dairy_purchase_history(product_id)
-`);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_non_dairy_purchase_history_product 
+      ON non_dairy_purchase_history(product_id)
+    `);
 
-await client.query(`
-  CREATE INDEX IF NOT EXISTS idx_non_dairy_purchase_history_date 
-  ON non_dairy_purchase_history(created_at)
-`);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_non_dairy_purchase_history_date 
+      ON non_dairy_purchase_history(created_at)
+    `);
 
     // Add triggers for tables with updated_at
-    const tablesWithUpdatedAt = ['products', 'farm_purchases', 'non_dairy_purchases', 'store_stock', 'suppliers', 'non_dairy_stock'];
+    const tablesWithUpdatedAt = ['products', 'farm_purchases', 'non_dairy_purchases', 'store_stock', 'suppliers', 'non_dairy_stock', 'non_dairy_items'];
     
     for (const table of tablesWithUpdatedAt) {
       await client.query(`
@@ -339,6 +339,7 @@ await client.query(`
     await client.query('COMMIT');
     console.log('✅ All tables created successfully');
     console.log('📦 Non-dairy purchases table added');
+    console.log('📦 Non-dairy items table with image_url column added');
     console.log('📊 Stock movements logging enabled');
     console.log('🏢 Suppliers table created');
     
