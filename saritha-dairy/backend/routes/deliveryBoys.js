@@ -12,6 +12,7 @@ router.patch('/:id/status', verifyToken, isAdmin, ctrl.toggleStatus);
 router.post('/:id/assign-customers', verifyToken, isAdmin, ctrl.assignCustomers);
 
 // ✅ DELIVERY BOYS CAN ACCESS THIS - Only verifyToken, NO isAdmin
+// This now returns delivered status from daily_delivery table
 router.get('/:id/customers', verifyToken, ctrl.getAssignedCustomers);
 
 module.exports = router;
