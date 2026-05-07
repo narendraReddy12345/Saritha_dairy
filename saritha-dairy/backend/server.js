@@ -1,4 +1,8 @@
 // server.js
+// ✅ SET TIMEZONE TO IST (Indian Standard Time) - MUST BE FIRST LINE
+process.env.TZ = 'Asia/Kolkata';
+console.log('🕐 Server timezone set to:', process.env.TZ, new Date().toString());
+
 const express = require('express');
 const cors = require('cors');
 const fs = require('fs');
