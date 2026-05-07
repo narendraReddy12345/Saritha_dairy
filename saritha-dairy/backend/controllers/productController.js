@@ -1,3 +1,4 @@
+// controllers/productController.js
 const pool = require('../config/db');
 
 // ✅ Try to set up Cloudinary, fallback to local if not available
@@ -29,12 +30,10 @@ try {
 } catch (error) {
   console.log('⚠️ Cloudinary not available, using local storage:', error.message);
   
-  // ✅ Fallback to local storage
   const multer = require('multer');
   const path = require('path');
   const fs = require('fs');
   
-  // Ensure uploads folder exists
   const uploadsDir = path.join(__dirname, '..', 'uploads');
   if (!fs.existsSync(uploadsDir)) {
     fs.mkdirSync(uploadsDir, { recursive: true });
@@ -48,7 +47,6 @@ try {
   upload = multer({ storage, limits: { fileSize: 10 * 1024 * 1024 } });
 }
 
-// ✅ Export multer middleware (works for both Cloudinary and local)
 exports.uploadImage = (req, res, next) => {
   if (!upload) {
     return res.status(500).json({ success: false, error: 'Upload not configured' });
@@ -76,23 +74,28 @@ exports.getAll = async (req, res) => {
 
 // Create product
 exports.create = async (req, res) => {
-  const { name, packs } = req.body;
+  const { name, packs, product_type, is_non_dairy } = req.body;
   
-  // ✅ Get image URL (Cloudinary returns path, local returns filename)
+  // Determine product type from request
+  let finalProductType = product_type || 'dairy';
+  let finalIsNonDairy = is_non_dairy === 'true' || finalProductType === 'non-dairy';
+  
+  // Get image URL
   let image_url = null;
   if (req.file) {
     image_url = req.file.path || `/uploads/${req.file.filename}`;
   }
   
-  console.log('📸 Creating product:', { name, image_url });
+  console.log('📸 Creating product:', { name, product_type: finalProductType, is_non_dairy: finalIsNonDairy, packs });
   
   try {
     const result = await pool.query(
-      'INSERT INTO products (name, packs, image_url) VALUES ($1, $2, $3) RETURNING *',
-      [name, packs, image_url]
+      `INSERT INTO products (name, packs, image_url, product_type, is_non_dairy) 
+       VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+      [name, packs, image_url, finalProductType, finalIsNonDairy]
     );
     
-    console.log('✅ Product created:', result.rows[0].id);
+    console.log('✅ Product created:', result.rows[0].id, 'Type:', finalProductType);
     res.json({ success: true, data: result.rows[0], message: `${name} added!` });
   } catch (error) {
     console.error('Error creating product:', error);
@@ -103,7 +106,11 @@ exports.create = async (req, res) => {
 // Update product
 exports.update = async (req, res) => {
   const { id } = req.params;
-  const { name, packs } = req.body;
+  const { name, packs, product_type, is_non_dairy } = req.body;
+  
+  // Determine product type
+  let finalProductType = product_type || 'dairy';
+  let finalIsNonDairy = is_non_dairy === 'true' || finalProductType === 'non-dairy';
   
   try {
     let image_url = null;
@@ -115,11 +122,15 @@ exports.update = async (req, res) => {
     
     let query, params;
     if (image_url) {
-      query = 'UPDATE products SET name=$1, packs=$2, image_url=$3 WHERE id=$4 RETURNING *';
-      params = [name, packs, image_url, id];
+      query = `UPDATE products 
+               SET name=$1, packs=$2, image_url=$3, product_type=$4, is_non_dairy=$5 
+               WHERE id=$6 RETURNING *`;
+      params = [name, packs, image_url, finalProductType, finalIsNonDairy, id];
     } else {
-      query = 'UPDATE products SET name=$1, packs=$2 WHERE id=$3 RETURNING *';
-      params = [name, packs, id];
+      query = `UPDATE products 
+               SET name=$1, packs=$2, product_type=$3, is_non_dairy=$4 
+               WHERE id=$5 RETURNING *`;
+      params = [name, packs, finalProductType, finalIsNonDairy, id];
     }
     
     const result = await pool.query(query, params);
@@ -128,7 +139,7 @@ exports.update = async (req, res) => {
       return res.status(404).json({ success: false, error: 'Product not found' });
     }
     
-    console.log('✅ Product updated:', result.rows[0].id);
+    console.log('✅ Product updated:', result.rows[0].id, 'Type:', finalProductType);
     res.json({ success: true, data: result.rows[0], message: `${name} updated!` });
   } catch (error) {
     console.error('Error updating product:', error);
