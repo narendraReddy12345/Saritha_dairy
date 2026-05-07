@@ -1,33 +1,29 @@
 // server.js
-// ✅ FORCE TIMEZONE TO IST - MUST BE THE VERY FIRST LINE
 process.env.TZ = 'Asia/Kolkata';
+console.log('🕐 Server timezone set to:', process.env.TZ);
+console.log('🕐 Current server time:', new Date().toString());
 
 const express = require('express');
 const cors = require('cors');
 const fs = require('fs');
-
 require('dotenv').config();
-
-console.log('🕐 Server timezone:', process.env.TZ);
-console.log('🕐 Current server time:', new Date().toString());
-console.log('🕐 Server time (IST):', new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }));
 
 const app = express();
 
-// ✅ Import the database migration function
+// Import database modules
+const pool = require('./config/db');
 const createAllTables = require('./config/tables');
 
-// Middleware
 app.use(cors());
 app.use(express.json());
 app.use('/uploads', express.static('uploads'));
 
-// Create uploads folder
 if (!fs.existsSync('./uploads')) fs.mkdirSync('./uploads');
 
-// ✅ Run database migration FIRST, then start server
-createAllTables()
-  .then(() => {
+// Run migration and start server
+const startServer = async () => {
+  try {
+    await createAllTables();
     console.log('✅ Database migration completed');
     
     // Mount Routes
@@ -40,26 +36,22 @@ createAllTables()
     app.use('/api', require('./routes/packing'));
     app.use('/api', require('./routes/stock'));
     app.use('/api', require('./routes/sales'));
-
-    // Credit and Customer Preferences
     app.use('/api/credit', require('./routes/credit'));
     app.use('/api/customer-preferences', require('./routes/customerPreferences'));
-
-    // ✅ NEW: Non-Dairy Items Routes (Standalone)
     app.use('/api', require('./routes/nonDairyItemsRoutes'));
 
-    // Initialize customer preferences table
     const { createTable } = require('./controllers/customerPreferences');
     createTable();
 
-    // Start Server
     const PORT = process.env.PORT || 5000;
     app.listen(PORT, () => {
       console.log(`🚀 Server running on http://localhost:${PORT}`);
       console.log(`🕐 Server time (IST): ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}`);
     });
-  })
-  .catch((error) => {
+  } catch (error) {
     console.error('❌ Database migration failed:', error);
     process.exit(1);
-  });
+  }
+};
+
+startServer();
