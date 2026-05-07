@@ -57,7 +57,7 @@ const Login = () => {
       return;
     }
     
-    const ADMIN_PHONE = '9347745435';
+    const ADMIN_PHONE = '9666966811';
     
     if (phone === ADMIN_PHONE) {
       const result = await loginAdmin(phone, password);
