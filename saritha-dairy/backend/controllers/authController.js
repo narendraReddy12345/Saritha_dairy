@@ -46,7 +46,7 @@ exports.adminLoginPhone = async (req, res) => {
   
   console.log('👑 Admin phone login attempt:', phone);
   
-  const ADMIN_PHONE = '9347745435';
+  const ADMIN_PHONE = '9666966811';
   
   try {
     if (phone !== ADMIN_PHONE) {
