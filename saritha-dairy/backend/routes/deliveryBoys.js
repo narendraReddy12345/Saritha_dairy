@@ -3,8 +3,7 @@ const router = require('express').Router();
 const ctrl = require('../controllers/deliveryBoyController');
 const { verifyToken, isAdmin } = require('../middleware/auth');
 
-// ✅ Make sure all these functions exist in your controller
-// Admin only routes
+// ✅ Admin only routes
 router.get('/', verifyToken, isAdmin, ctrl.getAll);
 router.post('/', verifyToken, isAdmin, ctrl.create);
 router.put('/:id', verifyToken, isAdmin, ctrl.update);
