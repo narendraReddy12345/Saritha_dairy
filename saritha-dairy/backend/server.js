@@ -1,7 +1,6 @@
 // server.js
-// ✅ SET TIMEZONE TO IST (Indian Standard Time) - MUST BE FIRST LINE
+// ✅ FORCE TIMEZONE TO IST - MUST BE THE VERY FIRST LINE
 process.env.TZ = 'Asia/Kolkata';
-console.log('🕐 Server timezone set to:', process.env.TZ, new Date().toString());
 
 const express = require('express');
 const cors = require('cors');
@@ -9,9 +8,13 @@ const fs = require('fs');
 
 require('dotenv').config();
 
+console.log('🕐 Server timezone:', process.env.TZ);
+console.log('🕐 Current server time:', new Date().toString());
+console.log('🕐 Server time (IST):', new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }));
+
 const app = express();
 
-// ✅ Import the database migration function (correct file name: tables.js)
+// ✅ Import the database migration function
 const createAllTables = require('./config/tables');
 
 // Middleware
@@ -53,13 +56,7 @@ createAllTables()
     const PORT = process.env.PORT || 5000;
     app.listen(PORT, () => {
       console.log(`🚀 Server running on http://localhost:${PORT}`);
-      console.log(`📦 API endpoints:`);
-      console.log(`   - GET  /api/non-dairy-items`);
-      console.log(`   - POST /api/non-dairy-items`);
-      console.log(`   - PUT  /api/non-dairy-items/:id`);
-      console.log(`   - DELETE /api/non-dairy-items/:id`);
-      console.log(`   - POST /api/non-dairy-items/purchase`);
-      console.log(`   - GET  /api/non-dairy-purchase-history`);
+      console.log(`🕐 Server time (IST): ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}`);
     });
   })
   .catch((error) => {

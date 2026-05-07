@@ -1,14 +1,27 @@
 // controllers/deliveryBoyController.js
 const pool = require('../config/db');
 
+// ✅ Helper to get current IST date as YYYY-MM-DD
+const getTodayIST = () => {
+  const now = new Date();
+  const istOffset = 5.5 * 60 * 60 * 1000; // 5 hours 30 minutes
+  const istTime = new Date(now.getTime() + istOffset);
+  
+  const year = istTime.getUTCFullYear();
+  const month = String(istTime.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(istTime.getUTCDate()).padStart(2, '0');
+  
+  return `${year}-${month}-${day}`;
+};
+
 exports.getAll = async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT db.*,
         (SELECT COUNT(*) FROM customer_delivery_assignments WHERE delivery_boy_id = db.id) as customer_count,
-        (SELECT COUNT(*) FROM daily_delivery WHERE delivery_boy_id = db.id AND delivery_date = CURRENT_DATE) as today_deliveries
+        (SELECT COUNT(*) FROM daily_delivery WHERE delivery_boy_id = db.id AND delivery_date = $1) as today_deliveries
       FROM delivery_boys db ORDER BY db.created_at DESC
-    `);
+    `, [getTodayIST()]);
     res.json({ success: true, data: result.rows });
   } catch (error) {
     console.error('Error getting delivery boys:', error);
@@ -170,11 +183,13 @@ exports.assignCustomers = async (req, res) => {
   }
 };
 
-// ✅ Make sure this function exists and is exported
+// ✅ FIXED: Get assigned customers with IST date
 exports.getAssignedCustomers = async (req, res) => {
   const { id } = req.params;
+  const todayIST = getTodayIST();
   
   console.log('📡 Fetching assigned customers for delivery boy ID:', id);
+  console.log('📡 IST Today:', todayIST);
   
   try {
     const result = await pool.query(`
@@ -191,21 +206,21 @@ exports.getAssignedCustomers = async (req, res) => {
           FROM customer_products cp WHERE cp.customer_id = c.id),
           '[]'::json
         ) as products,
-        -- ✅ Check if delivered today
+        -- ✅ Check if delivered today using IST date
         EXISTS(
           SELECT 1 FROM daily_delivery dd 
           WHERE dd.customer_id = c.id 
           AND dd.delivery_boy_id = $1 
-          AND DATE(dd.delivery_date) = CURRENT_DATE
+          AND dd.delivery_date = $2
           AND dd.status = 'delivered'
         ) as delivered
       FROM customers c
       JOIN customer_delivery_assignments cda ON c.id = cda.customer_id
       WHERE cda.delivery_boy_id = $1 
       ORDER BY c.name
-    `, [id]);
+    `, [id, todayIST]);
     
-    console.log(`✅ Found ${result.rows.length} assigned customers with delivery status`);
+    console.log(`✅ Found ${result.rows.length} assigned customers with delivery status for ${todayIST}`);
     
     res.json({ success: true, data: result.rows });
   } catch (error) {
