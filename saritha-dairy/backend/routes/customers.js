@@ -2,7 +2,7 @@
 const express = require('express');
 const router = express.Router();
 const customerController = require('../controllers/customerController');
-const { verifyToken } = require('../middleware/auth'); // ✅ Import, don't redeclare
+const { verifyToken } = require('../middleware/auth');
 
 // Customer routes
 router.get('/admin/customers', verifyToken, customerController.getAll);
