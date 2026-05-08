@@ -29,7 +29,6 @@ const DeliveryBoyManagement = () => {
     loadData();
   }, []);
 
-  // ✅ Get auth token
   const getToken = () => sessionStorage.getItem('authToken');
 
   const getAuthHeaders = () => ({
@@ -42,7 +41,6 @@ const DeliveryBoyManagement = () => {
     setTimeout(() => setMessage(null), 4000);
   };
 
-  // ✅ Load data from SQL backend with auth
   const loadData = async () => {
     setLoading(true);
     
@@ -86,11 +84,6 @@ const DeliveryBoyManagement = () => {
     setLoading(false);
   };
 
-  const getBoyCustomerCount = (boyId) => {
-    return customers.filter(c => c.assigned_boy_id === boyId).length;
-  };
-
-  // ✅ Add/Update Delivery Boy
   const handleBoySubmit = async (e) => {
     e.preventDefault();
     if (submitting) return;
@@ -135,7 +128,6 @@ const DeliveryBoyManagement = () => {
     setSubmitting(false);
   };
 
-  // ✅ Delete
   const handleDeleteBoy = async (id, name) => {
     if (window.confirm(`Delete "${name}"?`)) {
       try {
@@ -162,7 +154,6 @@ const DeliveryBoyManagement = () => {
     }
   };
 
-  // ✅ Toggle status
   const toggleBoyStatus = async (id) => {
     try {
       const response = await fetch(`${API_URL}/delivery-boys/${id}/status`, {
@@ -182,7 +173,6 @@ const DeliveryBoyManagement = () => {
     }
   };
 
-  // ✅ Open Assign Modal
   const openAssignModal = async (boy) => {
     setSelectedBoy(boy);
     setAssignSearch('');
@@ -203,7 +193,6 @@ const DeliveryBoyManagement = () => {
     setShowAssignModal(true);
   };
 
-  // ✅ Assign customers
   const handleAssignCustomers = async () => {
     try {
       const response = await fetch(`${API_URL}/delivery-boys/${selectedBoy.id}/assign-customers`, {
@@ -231,7 +220,6 @@ const DeliveryBoyManagement = () => {
     }
   };
 
-  // ✅ Remove assignment
   const removeCustomerAssignment = async (customerId) => {
     try {
       const newIds = selectedCustomers.filter(id => id !== customerId);
@@ -283,7 +271,6 @@ const DeliveryBoyManagement = () => {
 
   const alreadyAssigned = customers.filter(c => c.assigned_boy_id === selectedBoy?.id);
 
-  // ✅ Filter customers for assignment modal
   const getFilteredCustomers = () => {
     return customers.filter(c => {
       const matchesSearch = (c.name || '').toLowerCase().includes(assignSearch.toLowerCase()) ||
@@ -297,7 +284,6 @@ const DeliveryBoyManagement = () => {
 
   return (
     <div className="dbm-container">
-      {/* Toast Message */}
       {message && (
         <div style={{
           position: 'fixed', top: '20px', right: '20px', zIndex: 3000,
@@ -314,7 +300,6 @@ const DeliveryBoyManagement = () => {
         </div>
       )}
 
-      {/* Header */}
       <div style={{
         background: 'linear-gradient(135deg, #1a472a, #2d6a4f)',
         color: 'white', padding: '24px', borderRadius: '16px',
@@ -335,7 +320,6 @@ const DeliveryBoyManagement = () => {
         </button>
       </div>
 
-      {/* Stats */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '12px', marginBottom: '20px' }}>
         <div style={{ background: 'white', padding: '16px', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '12px', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
           <span style={{ fontSize: '28px' }}>👨‍💼</span>
@@ -351,14 +335,12 @@ const DeliveryBoyManagement = () => {
         </div>
       </div>
 
-      {/* Search */}
       <div style={{ position: 'relative', marginBottom: '16px' }}>
         <span style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)' }}>🔍</span>
         <input type="text" placeholder="Search delivery boys..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)}
           style={{ width: '100%', padding: '12px 14px 12px 42px', border: '2px solid #e0e0e0', borderRadius: '10px', fontSize: '14px' }} />
       </div>
 
-      {/* Loading / Empty / Table */}
       {loading ? (
         <div style={{ textAlign: 'center', padding: '60px', color: '#666' }}>
           <div style={{ fontSize: '40px' }}>🥛</div>
@@ -384,7 +366,7 @@ const DeliveryBoyManagement = () => {
                 <th style={{ padding: '12px 14px', textAlign: 'left', fontSize: '12px' }}>Customers</th>
                 <th style={{ padding: '12px 14px', textAlign: 'left', fontSize: '12px' }}>Status</th>
                 <th style={{ padding: '12px 14px', textAlign: 'left', fontSize: '12px' }}>Actions</th>
-              </tr>
+               </tr>
             </thead>
             <tbody>
               {filteredBoys.map((boy, idx) => (
@@ -437,7 +419,6 @@ const DeliveryBoyManagement = () => {
         </div>
       )}
 
-      {/* Add/Edit Boy Modal */}
       {showBoyModal && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2000, padding: '20px' }}
           onClick={() => { setShowBoyModal(false); setEditingBoy(null); resetForm(); }}>
@@ -542,14 +523,12 @@ const DeliveryBoyManagement = () => {
         </div>
       )}
 
-      {/* ========== ASSIGN CUSTOMERS MODAL - APARTMENT GROUPED ========== */}
       {showAssignModal && selectedBoy && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2000, padding: '20px' }}
           onClick={() => setShowAssignModal(false)}>
           <div style={{ background: 'white', borderRadius: '16px', padding: '24px', width: '100%', maxWidth: '900px', maxHeight: '85vh', overflow: 'auto' }}
             onClick={e => e.stopPropagation()}>
             
-            {/* Modal Header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
               <div>
                 <h2 style={{ color: '#1a472a', margin: 0 }}>🏢 Assign Customers to {selectedBoy.name}</h2>
@@ -569,14 +548,12 @@ const DeliveryBoyManagement = () => {
               </div>
             ) : (
               <>
-                {/* Search */}
                 <div style={{ position: 'relative', marginBottom: '16px' }}>
                   <span style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)' }}>🔍</span>
                   <input type="text" placeholder="Search by customer name, phone, apartment, or area..." value={assignSearch} onChange={e => setAssignSearch(e.target.value)}
                     style={{ width: '100%', padding: '10px 14px 10px 40px', border: '2px solid #e0e0e0', borderRadius: '8px', fontSize: '13px' }} />
                 </div>
 
-                {/* Select All / Clear */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
                   <span style={{ fontWeight: 600, color: '#1a472a' }}>✅ {selectedCustomers.length} customers selected</span>
                   <div style={{ display: 'flex', gap: '8px' }}>
@@ -588,7 +565,6 @@ const DeliveryBoyManagement = () => {
                   </div>
                 </div>
 
-                {/* ✅ APARTMENT GROUPED VIEW */}
                 <div style={{ maxHeight: '400px', overflow: 'auto' }}>
                   {(() => {
                     const filtered = getFilteredCustomers();
@@ -614,7 +590,6 @@ const DeliveryBoyManagement = () => {
                       return (
                         <div key={apt} style={{ marginBottom: '12px', border: `2px solid ${allSelected ? '#4caf50' : someSelected ? '#ff9800' : '#e0e0e0'}`, borderRadius: '12px', overflow: 'hidden', background: allSelected ? '#f0fdf4' : 'white' }}>
                           
-                          {/* Apartment Header */}
                           <div onClick={() => {
                             const aptIds = aptCustomers.map(c => c.id);
                             if (allSelected) {
@@ -633,7 +608,6 @@ const DeliveryBoyManagement = () => {
                             <span style={{ fontSize: '18px' }}>{allSelected ? '✅' : someSelected ? '◐' : '☐'}</span>
                           </div>
 
-                          {/* Customers in this apartment */}
                           <div style={{ padding: '8px' }}>
                             {aptCustomers.map(c => (
                               <div key={c.id} onClick={() => toggleCustomerSelect(c.id)} style={{
@@ -661,7 +635,6 @@ const DeliveryBoyManagement = () => {
                   })()}
                 </div>
 
-                {/* Already Assigned */}
                 {alreadyAssigned.length > 0 && selectedCustomers.length > 0 && (
                   <div style={{ marginTop: '20px', borderTop: '2px solid #e0e0e0', paddingTop: '16px' }}>
                     <h4 style={{ color: '#1a472a', marginBottom: '10px' }}>✅ Already Assigned to {selectedBoy.name} ({alreadyAssigned.length})</h4>
@@ -678,7 +651,6 @@ const DeliveryBoyManagement = () => {
                   </div>
                 )}
 
-                {/* Footer */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '20px', paddingTop: '16px', borderTop: '1px solid #eee' }}>
                   <span style={{ color: '#666', fontSize: '13px' }}>{selectedCustomers.length} selected</span>
                   <div style={{ display: 'flex', gap: '10px' }}>
