@@ -22,6 +22,15 @@ app.use('/uploads', express.static('uploads'));
 // Create uploads folder
 if (!fs.existsSync('./uploads')) fs.mkdirSync('./uploads');
 
+// Test route to check if server is running
+app.get('/', (req, res) => {
+  res.json({ success: true, message: 'Saritha Dairy API is running' });
+});
+
+app.get('/api/status', (req, res) => {
+  res.json({ success: true, message: 'API is working', timestamp: new Date().toISOString() });
+});
+
 // Start server function
 const startServer = async () => {
   try {
@@ -44,7 +53,7 @@ const startServer = async () => {
     app.use('/api', require('./routes/nonDairyItemsRoutes'));
 
     const { createTable } = require('./controllers/customerPreferences');
-    createTable();
+    await createTable();
 
     // Start server
     const PORT = process.env.PORT || 5000;
