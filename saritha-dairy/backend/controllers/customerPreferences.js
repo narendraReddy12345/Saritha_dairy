@@ -272,11 +272,26 @@ exports.getDeliveryBoyAssignedPreferences = async (req, res) => {
   }
 };
 
-// Mark extra order as delivered
+// ✅ FIXED: Mark extra order as delivered with proper authorization
 exports.markExtraOrderDelivered = async (req, res) => {
   const { customerId, orderId } = req.params;
   
   try {
+    // Verify delivery boy has access to this customer (if user is delivery boy)
+    if (req.user.role === 'delivery_boy') {
+      const assignmentCheck = await pool.query(
+        'SELECT 1 FROM customer_delivery_assignments WHERE delivery_boy_id = $1 AND customer_id = $2',
+        [req.user.id, customerId]
+      );
+      if (assignmentCheck.rows.length === 0) {
+        return res.status(403).json({ 
+          success: false, 
+          error: 'Access denied: You are not assigned to this customer' 
+        });
+      }
+    }
+    
+    // Get current extra orders
     const result = await pool.query(
       'SELECT extra_orders FROM customer_preferences WHERE customer_id = $1',
       [customerId]
@@ -291,19 +306,36 @@ exports.markExtraOrderDelivered = async (req, res) => {
       try { extraOrders = JSON.parse(extraOrders); } catch(e) { extraOrders = []; }
     }
     
-    const updatedOrders = extraOrders.map(order => {
-      if (order.id == orderId && !order.delivered) {
+    let orderFound = false;
+    let updatedOrders = extraOrders.map(order => {
+      // Convert both to string for comparison (since orderId comes as string from param)
+      if (String(order.id) === String(orderId) && !order.delivered) {
+        orderFound = true;
+        console.log(`✅ Marking order ${orderId} as delivered for customer ${customerId}`);
         return { ...order, delivered: true };
       }
       return order;
     });
     
+    if (!orderFound) {
+      return res.status(404).json({ 
+        success: false, 
+        error: 'Order not found or already delivered' 
+      });
+    }
+    
+    // Update the database
     await pool.query(
       'UPDATE customer_preferences SET extra_orders = $1, updated_at = NOW() WHERE customer_id = $2',
       [JSON.stringify(updatedOrders), customerId]
     );
     
-    res.json({ success: true, message: 'Order marked as delivered' });
+    console.log(`✅ Successfully marked order ${orderId} as delivered`);
+    res.json({ 
+      success: true, 
+      message: 'Order marked as delivered',
+      data: updatedOrders 
+    });
   } catch (error) {
     console.error('Error marking order delivered:', error);
     res.status(500).json({ success: false, error: error.message });
