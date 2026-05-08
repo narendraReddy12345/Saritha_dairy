@@ -1,3 +1,5 @@
+// controllers/customerPreferences.js
+
 const pool = require('../config/db');
 
 // Get customer preferences
@@ -272,9 +274,11 @@ exports.getDeliveryBoyAssignedPreferences = async (req, res) => {
   }
 };
 
-// ✅ FIXED: Mark extra order as delivered with proper authorization
+// ✅ FULLY FIXED: Mark extra order as delivered
 exports.markExtraOrderDelivered = async (req, res) => {
   const { customerId, orderId } = req.params;
+  
+  console.log(`📦 markExtraOrderDelivered called: customerId=${customerId}, orderId=${orderId}, user=${req.user?.id}, role=${req.user?.role}`);
   
   try {
     // Verify delivery boy has access to this customer (if user is delivery boy)
@@ -284,11 +288,13 @@ exports.markExtraOrderDelivered = async (req, res) => {
         [req.user.id, customerId]
       );
       if (assignmentCheck.rows.length === 0) {
+        console.log(`❌ Access denied: Delivery boy ${req.user.id} not assigned to customer ${customerId}`);
         return res.status(403).json({ 
           success: false, 
           error: 'Access denied: You are not assigned to this customer' 
         });
       }
+      console.log(`✅ Access granted: Delivery boy ${req.user.id} is assigned to customer ${customerId}`);
     }
     
     // Get current extra orders
@@ -298,6 +304,7 @@ exports.markExtraOrderDelivered = async (req, res) => {
     );
     
     if (result.rows.length === 0) {
+      console.log(`❌ No preferences found for customer ${customerId}`);
       return res.status(404).json({ success: false, error: 'Preferences not found' });
     }
     
@@ -306,38 +313,49 @@ exports.markExtraOrderDelivered = async (req, res) => {
       try { extraOrders = JSON.parse(extraOrders); } catch(e) { extraOrders = []; }
     }
     
+    console.log(`📋 Current extra orders for customer ${customerId}:`, extraOrders);
+    
     let orderFound = false;
     let updatedOrders = extraOrders.map(order => {
-      // Convert both to string for comparison (since orderId comes as string from param)
-      if (String(order.id) === String(orderId) && !order.delivered) {
-        orderFound = true;
-        console.log(`✅ Marking order ${orderId} as delivered for customer ${customerId}`);
-        return { ...order, delivered: true };
+      // Convert both to string for comparison
+      if (String(order.id) === String(orderId)) {
+        if (!order.delivered) {
+          orderFound = true;
+          console.log(`✅ Marking order ${orderId} as delivered for customer ${customerId}`);
+          return { ...order, delivered: true };
+        } else {
+          console.log(`⚠️ Order ${orderId} is already marked as delivered`);
+          orderFound = true; // Still found, but already delivered
+          return order;
+        }
       }
       return order;
     });
     
     if (!orderFound) {
+      console.log(`❌ Order ${orderId} not found in extra orders`);
       return res.status(404).json({ 
         success: false, 
-        error: 'Order not found or already delivered' 
+        error: 'Order not found' 
       });
     }
     
     // Update the database
-    await pool.query(
-      'UPDATE customer_preferences SET extra_orders = $1, updated_at = NOW() WHERE customer_id = $2',
+    const updateResult = await pool.query(
+      'UPDATE customer_preferences SET extra_orders = $1, updated_at = NOW() WHERE customer_id = $2 RETURNING *',
       [JSON.stringify(updatedOrders), customerId]
     );
     
     console.log(`✅ Successfully marked order ${orderId} as delivered`);
+    console.log(`📊 Updated extra_orders:`, JSON.stringify(updatedOrders));
+    
     res.json({ 
       success: true, 
       message: 'Order marked as delivered',
       data: updatedOrders 
     });
   } catch (error) {
-    console.error('Error marking order delivered:', error);
+    console.error('❌ Error marking order delivered:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 };
