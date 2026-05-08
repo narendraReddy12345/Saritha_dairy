@@ -1,13 +1,19 @@
-const router = require('express').Router();
-const ctrl = require('../controllers/customerController');
+const express = require('express');
+const router = express.Router();
+const customerController = require('../controllers/customerController');
 const { verifyToken } = require('../middleware/auth');
-router.get('/customers', verifyToken, ctrl.getAll);
-router.post('/customers', verifyToken, ctrl.create);
-router.put('/customers/:id', verifyToken, ctrl.update);
-router.delete('/customers/:id', verifyToken, ctrl.remove);
-router.get('/customer-deliveries/:customerId', verifyToken, ctrl.getDeliveries);
-router.post('/daily-delivery', verifyToken, ctrl.recordDelivery);
-// Add these routes
+
+// Customer routes
+router.get('/customers', verifyToken, customerController.getAll);
+router.post('/customers', verifyToken, customerController.create);
+router.put('/customers/:id', verifyToken, customerController.update);
+router.delete('/customers/:id', verifyToken, customerController.remove);
+router.get('/admin/customer-deliveries/:customerId', verifyToken, customerController.getDeliveries);
+router.post('/daily-delivery', verifyToken, customerController.recordDelivery);
+
+// Delivery routes
+router.post('/delivery/record', verifyToken, customerController.recordDelivery);
 router.get('/delivery/today/:delivery_boy_id', verifyToken, customerController.getTodayDeliveries);
 router.delete('/delivery/:id', verifyToken, customerController.deleteDelivery);
+
 module.exports = router;
