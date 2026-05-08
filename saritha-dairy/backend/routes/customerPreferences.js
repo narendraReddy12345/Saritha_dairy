@@ -7,12 +7,15 @@ const { verifyToken, isAdmin, isAdminOrSelf } = require('../middleware/auth');
 router.get('/all/list', verifyToken, isAdmin, controller.getAllPreferences);
 router.get('/extra-orders/all', verifyToken, isAdmin, controller.getAllExtraOrders);
 
-// Routes accessible by admin OR the customer themselves
+// Customer self-access routes
 router.get('/:customerId', verifyToken, isAdminOrSelf, controller.getPreferences);
 router.post('/:customerId', verifyToken, isAdminOrSelf, controller.savePreferences);
 
-// Routes for delivery boy - get data for assigned customers only
+// Delivery boy routes
 router.get('/delivery-boy/:delivery_boy_id/extra-orders', verifyToken, controller.getDeliveryBoyExtraOrders);
 router.get('/delivery-boy/:delivery_boy_id/assigned', verifyToken, controller.getDeliveryBoyAssignedPreferences);
+
+// ✅ NEW: Mark specific extra order as delivered
+router.patch('/:customerId/extra-order/:orderId/deliver', verifyToken, controller.markExtraOrderDelivered);
 
 module.exports = router;

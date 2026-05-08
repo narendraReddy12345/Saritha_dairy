@@ -17,13 +17,31 @@ exports.getPreferences = async (req, res) => {
           want_milk: true,
           quantity: 2,
           pack_size: '500ml',
-          skip_days: '[]',
-          extra_orders: '[]'
+          skip_days: [],
+          extra_orders: []
         }
       });
     }
     
-    res.json({ success: true, data: result.rows[0] });
+    // Parse JSON fields
+    let skipDays = result.rows[0].skip_days;
+    let extraOrders = result.rows[0].extra_orders;
+    
+    if (typeof skipDays === 'string') {
+      try { skipDays = JSON.parse(skipDays); } catch(e) { skipDays = []; }
+    }
+    if (typeof extraOrders === 'string') {
+      try { extraOrders = JSON.parse(extraOrders); } catch(e) { extraOrders = []; }
+    }
+    
+    res.json({ 
+      success: true, 
+      data: {
+        ...result.rows[0],
+        skip_days: skipDays,
+        extra_orders: extraOrders
+      }
+    });
   } catch (error) {
     console.error('Error getting preferences:', error);
     res.status(500).json({ success: false, error: error.message });
@@ -122,7 +140,7 @@ exports.getAllExtraOrders = async (req, res) => {
           : (row.extra_orders || []);
       } catch (e) { extraOrders = []; }
       
-      const todayOrders = extraOrders.filter(o => o.date === today);
+      const todayOrders = extraOrders.filter(o => o.date === today && !o.delivered);
       
       return {
         customerId: row.customer_id,
@@ -142,11 +160,10 @@ exports.getAllExtraOrders = async (req, res) => {
   }
 };
 
-// ✅ NEW: Get extra orders for delivery boy's assigned customers
+// Get extra orders for delivery boy's assigned customers
 exports.getDeliveryBoyExtraOrders = async (req, res) => {
   const { delivery_boy_id } = req.params;
   
-  // Security check
   if (req.user.role !== 'admin' && req.user.id !== parseInt(delivery_boy_id)) {
     return res.status(403).json({ success: false, error: 'Access denied' });
   }
@@ -165,9 +182,6 @@ exports.getDeliveryBoyExtraOrders = async (req, res) => {
       JOIN customer_delivery_assignments cda ON c.id = cda.customer_id
       JOIN customer_preferences cp ON c.id = cp.customer_id
       WHERE cda.delivery_boy_id = $1
-        AND cp.extra_orders IS NOT NULL 
-        AND cp.extra_orders != '[]'
-        AND cp.extra_orders != 'null'
       ORDER BY c.apartment, c.flat_no
     `, [delivery_boy_id]);
     
@@ -201,11 +215,10 @@ exports.getDeliveryBoyExtraOrders = async (req, res) => {
   }
 };
 
-// ✅ NEW: Get all preferences for delivery boy's assigned customers
+// Get all preferences for delivery boy's assigned customers
 exports.getDeliveryBoyAssignedPreferences = async (req, res) => {
   const { delivery_boy_id } = req.params;
   
-  // Security check
   if (req.user.role !== 'admin' && req.user.id !== parseInt(delivery_boy_id)) {
     return res.status(403).json({ success: false, error: 'Access denied' });
   }
@@ -260,6 +273,47 @@ exports.getDeliveryBoyAssignedPreferences = async (req, res) => {
   }
 };
 
+// ✅ NEW: Mark extra order as delivered
+exports.markExtraOrderDelivered = async (req, res) => {
+  const { customerId, orderId } = req.params;
+  
+  try {
+    // Get current preferences
+    const result = await pool.query(
+      'SELECT extra_orders FROM customer_preferences WHERE customer_id = $1',
+      [customerId]
+    );
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Preferences not found' });
+    }
+    
+    let extraOrders = result.rows[0].extra_orders;
+    if (typeof extraOrders === 'string') {
+      try { extraOrders = JSON.parse(extraOrders); } catch(e) { extraOrders = []; }
+    }
+    
+    // Find and mark the order as delivered
+    const updatedOrders = extraOrders.map(order => {
+      if (order.id == orderId && !order.delivered) {
+        return { ...order, delivered: true };
+      }
+      return order;
+    });
+    
+    // Save back to database
+    await pool.query(
+      'UPDATE customer_preferences SET extra_orders = $1, updated_at = NOW() WHERE customer_id = $2',
+      [JSON.stringify(updatedOrders), customerId]
+    );
+    
+    res.json({ success: true, message: 'Order marked as delivered' });
+  } catch (error) {
+    console.error('Error marking order delivered:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
 // Create table if not exists
 exports.createTable = async () => {
   try {
@@ -275,14 +329,6 @@ exports.createTable = async () => {
         created_at TIMESTAMP DEFAULT NOW(),
         updated_at TIMESTAMP DEFAULT NOW()
       )
-    `);
-    
-    await pool.query(`
-      DO $$ 
-      BEGIN 
-        BEGIN ALTER TABLE customer_preferences ADD COLUMN skip_days TEXT DEFAULT '[]'; EXCEPTION WHEN duplicate_column THEN NULL; END;
-        BEGIN ALTER TABLE customer_preferences ADD COLUMN extra_orders TEXT DEFAULT '[]'; EXCEPTION WHEN duplicate_column THEN NULL; END;
-      END $$;
     `);
     
     console.log('✅ Customer preferences table ready');
