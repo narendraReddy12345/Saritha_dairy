@@ -7,7 +7,83 @@ const createAllTables = async () => {
     await client.query('BEGIN');
     await client.query("SET TIME ZONE 'Asia/Kolkata'");
 
-    // Add delivered column to daily_delivery if not exists
+    // ============================================
+    // MIGRATION: Fix existing daily_delivery table
+    // ============================================
+    console.log('🔧 Checking and fixing daily_delivery table...');
+    
+    // Add missing columns to daily_delivery
+    await client.query(`
+      DO $$ 
+      BEGIN 
+        -- Add created_at if not exists
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+          WHERE table_name='daily_delivery' AND column_name='created_at') THEN
+          ALTER TABLE daily_delivery ADD COLUMN created_at TIMESTAMP DEFAULT NOW();
+          RAISE NOTICE '✅ Added created_at column to daily_delivery';
+        END IF;
+        
+        -- Add updated_at if not exists
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+          WHERE table_name='daily_delivery' AND column_name='updated_at') THEN
+          ALTER TABLE daily_delivery ADD COLUMN updated_at TIMESTAMP DEFAULT NOW();
+          RAISE NOTICE '✅ Added updated_at column to daily_delivery';
+        END IF;
+        
+        -- Add total_amount if not exists
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+          WHERE table_name='daily_delivery' AND column_name='total_amount') THEN
+          ALTER TABLE daily_delivery ADD COLUMN total_amount DECIMAL(10,2);
+          RAISE NOTICE '✅ Added total_amount column to daily_delivery';
+        END IF;
+        
+        -- Add delivered if not exists
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+          WHERE table_name='daily_delivery' AND column_name='delivered') THEN
+          ALTER TABLE daily_delivery ADD COLUMN delivered BOOLEAN DEFAULT FALSE;
+          RAISE NOTICE '✅ Added delivered column to daily_delivery';
+        END IF;
+      END $$;
+    `);
+
+    // Create trigger function for updated_at
+    await client.query(`
+      CREATE OR REPLACE FUNCTION update_daily_delivery_updated_at()
+      RETURNS TRIGGER AS $$
+      BEGIN
+        NEW.updated_at = NOW();
+        RETURN NEW;
+      END;
+      $$ language 'plpgsql';
+    `);
+
+    // Add trigger for updated_at
+    await client.query(`
+      DROP TRIGGER IF EXISTS update_daily_delivery_updated_at ON daily_delivery;
+      CREATE TRIGGER update_daily_delivery_updated_at
+        BEFORE UPDATE ON daily_delivery
+        FOR EACH ROW
+        EXECUTE FUNCTION update_daily_delivery_updated_at();
+    `);
+
+    // Remove unique constraint if it exists (causes issues with multiple products per day)
+    await client.query(`
+      ALTER TABLE daily_delivery 
+      DROP CONSTRAINT IF EXISTS unique_customer_daily_delivery;
+    `);
+
+    // Add indexes for better performance
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_daily_delivery_customer_date 
+      ON daily_delivery(customer_id, delivery_date);
+    `);
+
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_daily_delivery_delivery_boy_date 
+      ON daily_delivery(delivery_boy_id, delivery_date);
+    `);
+
+    // Add delivered column to daily_delivery if not exists (redundant but safe)
     await client.query(`
       DO $$ 
       BEGIN 
@@ -17,6 +93,10 @@ const createAllTables = async () => {
         END IF;
       END $$;
     `);
+
+    // ============================================
+    // CREATE TABLES (if they don't exist)
+    // ============================================
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS delivery_boys (
@@ -59,24 +139,23 @@ const createAllTables = async () => {
       )
     `);
 
+    // Recreate daily_delivery with proper structure if it doesn't exist
     await client.query(`
       CREATE TABLE IF NOT EXISTS daily_delivery (
-        id SERIAL PRIMARY KEY, customer_id INTEGER REFERENCES customers(id) ON DELETE CASCADE,
+        id SERIAL PRIMARY KEY, 
+        customer_id INTEGER REFERENCES customers(id) ON DELETE CASCADE,
         delivery_boy_id INTEGER REFERENCES delivery_boys(id),
-        delivery_date DATE DEFAULT CURRENT_DATE, product_name VARCHAR(100),
-        pack_size VARCHAR(50), quantity INTEGER DEFAULT 1,
-        price DECIMAL(10,2), total_amount DECIMAL(10,2),
+        delivery_date DATE DEFAULT CURRENT_DATE, 
+        product_name VARCHAR(100),
+        pack_size VARCHAR(50), 
+        quantity INTEGER DEFAULT 1,
+        price DECIMAL(10,2), 
+        total_amount DECIMAL(10,2),
         status VARCHAR(50) DEFAULT 'pending',
         delivered BOOLEAN DEFAULT FALSE,
         created_at TIMESTAMP DEFAULT NOW(),
         updated_at TIMESTAMP DEFAULT NOW()
       )
-    `);
-
-    await client.query(`
-      ALTER TABLE daily_delivery 
-      DROP CONSTRAINT IF EXISTS unique_customer_daily_delivery,
-      ADD CONSTRAINT unique_customer_daily_delivery UNIQUE (customer_id, delivery_date)
     `);
 
     await client.query(`
@@ -346,6 +425,7 @@ const createAllTables = async () => {
 
     await client.query('COMMIT');
     console.log('✅ All tables created successfully');
+    console.log('✅ Daily_delivery table migration completed');
     console.log('📦 Non-dairy purchases table added');
     console.log('📦 Non-dairy items table with image_url column added');
     console.log('📊 Stock movements logging enabled');
