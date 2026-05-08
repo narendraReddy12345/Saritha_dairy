@@ -23,7 +23,6 @@ exports.getPreferences = async (req, res) => {
       });
     }
     
-    // Parse JSON fields
     let skipDays = result.rows[0].skip_days;
     let extraOrders = result.rows[0].extra_orders;
     
@@ -273,12 +272,11 @@ exports.getDeliveryBoyAssignedPreferences = async (req, res) => {
   }
 };
 
-// ✅ NEW: Mark extra order as delivered
+// Mark extra order as delivered
 exports.markExtraOrderDelivered = async (req, res) => {
   const { customerId, orderId } = req.params;
   
   try {
-    // Get current preferences
     const result = await pool.query(
       'SELECT extra_orders FROM customer_preferences WHERE customer_id = $1',
       [customerId]
@@ -293,7 +291,6 @@ exports.markExtraOrderDelivered = async (req, res) => {
       try { extraOrders = JSON.parse(extraOrders); } catch(e) { extraOrders = []; }
     }
     
-    // Find and mark the order as delivered
     const updatedOrders = extraOrders.map(order => {
       if (order.id == orderId && !order.delivered) {
         return { ...order, delivered: true };
@@ -301,7 +298,6 @@ exports.markExtraOrderDelivered = async (req, res) => {
       return order;
     });
     
-    // Save back to database
     await pool.query(
       'UPDATE customer_preferences SET extra_orders = $1, updated_at = NOW() WHERE customer_id = $2',
       [JSON.stringify(updatedOrders), customerId]

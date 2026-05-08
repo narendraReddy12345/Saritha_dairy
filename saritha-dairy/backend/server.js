@@ -22,7 +22,7 @@ app.use('/uploads', express.static('uploads'));
 // Create uploads folder
 if (!fs.existsSync('./uploads')) fs.mkdirSync('./uploads');
 
-// Test route to check if server is running
+// Test route
 app.get('/', (req, res) => {
   res.json({ success: true, message: 'Saritha Dairy API is running' });
 });
@@ -63,6 +63,7 @@ const startServer = async () => {
     });
   } catch (error) {
     console.error('❌ Failed to start server:', error.message);
+    console.error('❌ Stack trace:', error.stack);
     process.exit(1);
   }
 };

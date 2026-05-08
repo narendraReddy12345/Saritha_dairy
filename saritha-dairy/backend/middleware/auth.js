@@ -30,28 +30,25 @@ const isAdmin = (req, res, next) => {
   next();
 };
 
-// ✅ New middleware: Allow if admin OR if it's the delivery boy's own data
+// ✅ Updated: Allow admin, delivery boy, or customer to access their own data
 const isAdminOrSelf = (req, res, next) => {
   // Admin can access anything
   if (req.user?.role === 'admin') {
     return next();
   }
   
-  // Delivery boy can access their own data
-  if (req.user?.role === 'delivery') {
-    const requestedId = parseInt(req.params.id);
-    const userId = req.user.id;
-    
-    console.log(`🔍 Self-check: requested=${requestedId}, user=${userId}`);
-    
-    if (requestedId === userId) {
-      return next();
-    }
-    
-    return res.status(403).json({ success: false, error: 'You can only access your own data' });
+  // Get the requested ID from params (supports both :customerId and :id)
+  const requestedId = parseInt(req.params.customerId || req.params.id || req.params.delivery_boy_id);
+  const userId = req.user.id;
+  
+  console.log(`🔍 Self-check: role=${req.user?.role}, requested=${requestedId}, user=${userId}`);
+  
+  // Allow if requesting own data
+  if (requestedId === userId) {
+    return next();
   }
   
-  return res.status(403).json({ success: false, error: 'Access denied' });
+  return res.status(403).json({ success: false, error: 'Access denied. You can only access your own data.' });
 };
 
 module.exports = { verifyToken, isAdmin, isAdminOrSelf, JWT_SECRET, ADMIN_EMAILS };
