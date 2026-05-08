@@ -1183,12 +1183,13 @@ body{
 .product1-tag {
   background: #ff0404;
   padding: 6px 12px;
-  border-radius: 20px;
-  font-size: 16px;
+  border-radius: 18px;
+  font-size: 12px;
   color: #ffffff;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 12px;
+  margin-top: 12px;
 }
 
 .product-tag.completed-tag {
@@ -1569,4 +1570,276 @@ body{
   .history-user-name {
     font-size: 14px;
   }
+}
+/* Extra Orders Notification */
+.dd-notification-badge {
+  position: fixed;
+  top: 80px;
+  right: 16px;
+  background: linear-gradient(135deg, #f59e0b, #ef4444);
+  color: white;
+  padding: 12px 20px;
+  border-radius: 50px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  z-index: 1000;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+  animation: slideIn 0.3s ease;
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.dd-notification-icon {
+  font-size: 20px;
+}
+
+.dd-notification-count {
+  background: white;
+  color: #ef4444;
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  font-size: 12px;
+}
+
+.dd-notification-text {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+/* Modal for Extra Orders */
+.dd-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+}
+
+.dd-modal {
+  background: white;
+  border-radius: 24px;
+  width: 90%;
+  max-width: 500px;
+  max-height: 80vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.dd-modal-header {
+  padding: 20px;
+  border-bottom: 1px solid #eee;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  position: relative;
+}
+
+.dd-modal-header span {
+  font-size: 28px;
+}
+
+.dd-modal-header h3 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.dd-modal-close {
+  position: absolute;
+  right: 16px;
+  top: 16px;
+  background: none;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+  color: #999;
+}
+
+.dd-modal-body {
+  padding: 20px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.dd-extra-order-item {
+  background: #f8f9fa;
+  border-radius: 16px;
+  padding: 15px;
+  margin-bottom: 12px;
+}
+
+.dd-extra-order-customer {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #e9ecef;
+}
+
+.dd-extra-order-customer strong {
+  font-size: 16px;
+  color: #333;
+}
+
+.dd-extra-order-flat {
+  font-size: 12px;
+  color: #666;
+  background: #e9ecef;
+  padding: 2px 8px;
+  border-radius: 12px;
+}
+
+.dd-extra-order-products {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.dd-extra-order-product {
+  background: #fff3e0;
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  color: #f59e0b;
+}
+
+.dd-modal-footer {
+  padding: 16px 20px;
+  border-top: 1px solid #eee;
+  text-align: center;
+}
+
+.dd-modal-btn {
+  background: linear-gradient(135deg, #f59e0b, #ef4444);
+  color: white;
+  border: none;
+  padding: 10px 24px;
+  border-radius: 30px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* Milk Status Indicators */
+.milk-status {
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 12px;
+  display: inline-block;
+  margin-top: 4px;
+}
+
+.milk-status.paused {
+  background: #fee2e2;
+  color: #ef4444;
+}
+
+.milk-status.skipped {
+  background: #fff3e0;
+  color: #f59e0b;
+}
+
+/* Product Tags */
+.product-tag {
+  background: #f3f4f6;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 11px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.product-tag.milk-product {
+  background: #e0f2fe;
+  color: #0284c7;
+}
+
+.product-tag.extra-product {
+  background: #fef3c7;
+  color: #d97706;
+}
+
+.product-tag.paused {
+  background: #fee2e2;
+  color: #dc2626;
+  text-decoration: line-through;
+}
+
+.product-tag.skipped {
+  background: #ffedd5;
+  color: #f59e0b;
+  text-decoration: line-through;
+}
+
+/* Card with Extra Orders */
+.dd-card.has-extra {
+  border-left: 4px solid #f59e0b;
+}
+
+.extra-badge {
+  background: #f59e0b;
+  color: white;
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 12px;
+  margin-left: 8px;
+}
+
+/* Nav Badge */
+.nav-badge {
+  background: #ef4444;
+  color: white;
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 12px;
+  margin-left: 4px;
+}
+
+/* Refresh Button */
+.dd-refresh-btn {
+  position: fixed;
+  bottom: 80px;
+  right: 16px;
+  background: #3b82f6;
+  color: white;
+  border: none;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  font-size: 20px;
+  cursor: pointer;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+  z-index: 100;
+}
+
+.dd-refresh-btn:active {
+  transform: scale(0.95);
+}
+
+/* Disabled Deliver Button */
+.action-deliver.disabled {
+  background: #ccc;
+  cursor: not-allowed;
+  opacity: 0.6;
 }
