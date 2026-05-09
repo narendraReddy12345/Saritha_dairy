@@ -1,4 +1,4 @@
-// routes/admin.js
+// routes/admin.js - Version without delivery_time column
 const express = require('express');
 const router = express.Router();
 const pool = require('../config/db');
@@ -17,7 +17,6 @@ router.get('/customers', verifyToken, isAdmin, async (req, res) => {
   console.log('📋 GET /api/admin/customers called');
   
   try {
-    // First, check if customers table exists
     const tableCheck = await pool.query(`
       SELECT EXISTS (
         SELECT FROM information_schema.tables 
@@ -42,7 +41,6 @@ router.get('/customers', verifyToken, isAdmin, async (req, res) => {
     
     const customers = [];
     for (const customer of result.rows) {
-      // Check if customer_products table exists
       const productsTableCheck = await pool.query(`
         SELECT EXISTS (
           SELECT FROM information_schema.tables 
@@ -79,7 +77,6 @@ router.get('/customers', verifyToken, isAdmin, async (req, res) => {
         city: customer.city,
         state: customer.state,
         daily_products: products,
-        delivery_time: customer.delivery_time || 'morning',
         notes: customer.notes,
         is_active: customer.is_active !== false,
         assigned_boy_id: customer.assigned_boy_id,
@@ -96,14 +93,14 @@ router.get('/customers', verifyToken, isAdmin, async (req, res) => {
   }
 });
 
-// ✅ CREATE customer - Simplified version that definitely works
+// ✅ CREATE customer - WITHOUT delivery_time column
 router.post('/customers', verifyToken, isAdmin, async (req, res) => {
   console.log('📝 POST /api/admin/customers called');
   console.log('Request body:', JSON.stringify(req.body, null, 2));
   
   const { 
     name, email, phone, password, registrationNumber, alternatePhone,
-    address, dailyProducts, deliveryTime, notes 
+    address, dailyProducts, notes 
   } = req.body;
   
   // Validate required fields
@@ -122,18 +119,17 @@ router.post('/customers', verifyToken, isAdmin, async (req, res) => {
       hashedPassword = await bcrypt.hash(password, 10);
     }
     
-    // Simple insert first - only with columns that definitely exist
+    // Insert without delivery_time
     const result = await client.query(`
       INSERT INTO customers (
-        name, phone, email, password, delivery_time, notes, is_active, created_at, updated_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, true, NOW(), NOW())
+        name, phone, email, password, notes, is_active, created_at, updated_at
+      ) VALUES ($1, $2, $3, $4, $5, true, NOW(), NOW())
       RETURNING id
     `, [
       name, 
       phone, 
       email || null, 
       hashedPassword, 
-      deliveryTime || 'morning', 
       notes || ''
     ]);
     
@@ -172,7 +168,6 @@ router.post('/customers', verifyToken, isAdmin, async (req, res) => {
     
     // Insert products if any
     if (dailyProducts && dailyProducts.length > 0) {
-      // Check if customer_products table exists
       const tableCheck = await client.query(`
         SELECT EXISTS (
           SELECT FROM information_schema.tables 
@@ -215,7 +210,6 @@ router.get('/customers/:customerId/deliveries', verifyToken, isAdmin, async (req
   const { customerId } = req.params;
   
   try {
-    // Check if daily_delivery table exists
     const tableCheck = await pool.query(`
       SELECT EXISTS (
         SELECT FROM information_schema.tables 
@@ -262,7 +256,7 @@ router.get('/customers/:id', verifyToken, isAdmin, async (req, res) => {
 // UPDATE customer
 router.put('/customers/:id', verifyToken, isAdmin, async (req, res) => {
   const { id } = req.params;
-  const { name, email, phone, registrationNumber, alternatePhone, address, dailyProducts, deliveryTime, notes, is_active } = req.body;
+  const { name, email, phone, registrationNumber, alternatePhone, address, dailyProducts, notes, is_active } = req.body;
   
   const client = await pool.connect();
   
@@ -284,11 +278,10 @@ router.put('/customers/:id', verifyToken, isAdmin, async (req, res) => {
           pincode = $11, 
           city = $12, 
           state = $13, 
-          delivery_time = $14, 
-          notes = $15, 
-          is_active = $16, 
+          notes = $14, 
+          is_active = $15, 
           updated_at = NOW()
-      WHERE id = $17
+      WHERE id = $16
     `, [
       name, 
       email, 
@@ -303,13 +296,11 @@ router.put('/customers/:id', verifyToken, isAdmin, async (req, res) => {
       address?.pincode || null,
       address?.city || null, 
       address?.state || null,
-      deliveryTime || 'morning', 
       notes || null, 
       is_active !== false, 
       id
     ]);
     
-    // Check if customer_products table exists
     const tableCheck = await client.query(`
       SELECT EXISTS (
         SELECT FROM information_schema.tables 
@@ -318,7 +309,6 @@ router.put('/customers/:id', verifyToken, isAdmin, async (req, res) => {
     `);
     
     if (tableCheck.rows[0].exists) {
-      // Update products - delete old and insert new
       await client.query('DELETE FROM customer_products WHERE customer_id = $1', [id]);
       
       if (dailyProducts && dailyProducts.length > 0) {
@@ -351,7 +341,6 @@ router.delete('/customers/:id', verifyToken, isAdmin, async (req, res) => {
   try {
     await pool.query('BEGIN');
     
-    // Check if customer_products table exists and delete from it
     const tableCheck = await pool.query(`
       SELECT EXISTS (
         SELECT FROM information_schema.tables 
@@ -380,7 +369,6 @@ router.post('/daily-delivery', verifyToken, isAdmin, async (req, res) => {
   const { customer_id, delivery_boy_id, delivery_date, products, status } = req.body;
   
   try {
-    // Check if daily_delivery table exists
     const tableCheck = await pool.query(`
       SELECT EXISTS (
         SELECT FROM information_schema.tables 
@@ -394,10 +382,8 @@ router.post('/daily-delivery', verifyToken, isAdmin, async (req, res) => {
     
     const deliveryDate = delivery_date || new Date().toISOString().split('T')[0];
     
-    // Delete existing
     await pool.query('DELETE FROM daily_delivery WHERE customer_id = $1 AND delivery_date = $2', [customer_id, deliveryDate]);
     
-    // Insert new
     for (const product of products) {
       const totalAmount = (product.price || 0) * (product.quantity || 1);
       await pool.query(`
