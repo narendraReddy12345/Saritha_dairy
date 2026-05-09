@@ -16,32 +16,24 @@ const createAllTables = async () => {
     await client.query(`
       DO $$ 
       BEGIN 
-        -- Add created_at if not exists
         IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
           WHERE table_name='daily_delivery' AND column_name='created_at') THEN
           ALTER TABLE daily_delivery ADD COLUMN created_at TIMESTAMP DEFAULT NOW();
-          RAISE NOTICE '✅ Added created_at column to daily_delivery';
         END IF;
         
-        -- Add updated_at if not exists
         IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
           WHERE table_name='daily_delivery' AND column_name='updated_at') THEN
           ALTER TABLE daily_delivery ADD COLUMN updated_at TIMESTAMP DEFAULT NOW();
-          RAISE NOTICE '✅ Added updated_at column to daily_delivery';
         END IF;
         
-        -- Add total_amount if not exists
         IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
           WHERE table_name='daily_delivery' AND column_name='total_amount') THEN
           ALTER TABLE daily_delivery ADD COLUMN total_amount DECIMAL(10,2);
-          RAISE NOTICE '✅ Added total_amount column to daily_delivery';
         END IF;
         
-        -- Add delivered if not exists
         IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
           WHERE table_name='daily_delivery' AND column_name='delivered') THEN
           ALTER TABLE daily_delivery ADD COLUMN delivered BOOLEAN DEFAULT FALSE;
-          RAISE NOTICE '✅ Added delivered column to daily_delivery';
         END IF;
       END $$;
     `);
@@ -66,13 +58,13 @@ const createAllTables = async () => {
         EXECUTE FUNCTION update_daily_delivery_updated_at();
     `);
 
-    // Remove unique constraint if it exists (causes issues with multiple products per day)
+    // Remove unique constraint if it exists
     await client.query(`
       ALTER TABLE daily_delivery 
       DROP CONSTRAINT IF EXISTS unique_customer_daily_delivery;
     `);
 
-    // Add indexes for better performance
+    // Add indexes
     await client.query(`
       CREATE INDEX IF NOT EXISTS idx_daily_delivery_customer_date 
       ON daily_delivery(customer_id, delivery_date);
@@ -81,17 +73,6 @@ const createAllTables = async () => {
     await client.query(`
       CREATE INDEX IF NOT EXISTS idx_daily_delivery_delivery_boy_date 
       ON daily_delivery(delivery_boy_id, delivery_date);
-    `);
-
-    // Add delivered column to daily_delivery if not exists (redundant but safe)
-    await client.query(`
-      DO $$ 
-      BEGIN 
-        IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
-          WHERE table_name='daily_delivery' AND column_name='delivered') THEN
-          ALTER TABLE daily_delivery ADD COLUMN delivered BOOLEAN DEFAULT FALSE;
-        END IF;
-      END $$;
     `);
 
     // ============================================
@@ -110,17 +91,65 @@ const createAllTables = async () => {
       )
     `);
 
+    // ✅ UPDATED customers table with ALL required columns
     await client.query(`
       CREATE TABLE IF NOT EXISTS customers (
-        id SERIAL PRIMARY KEY, name VARCHAR(200) NOT NULL,
-        email VARCHAR(200) UNIQUE, phone VARCHAR(20) NOT NULL,
-        password VARCHAR(255), address TEXT, area VARCHAR(100),
-        colony VARCHAR(100), apartment VARCHAR(100), flat_no VARCHAR(50),
-        landmark VARCHAR(200), pincode VARCHAR(10), city VARCHAR(100),
-        state VARCHAR(100), created_at TIMESTAMP DEFAULT NOW(),
+        id SERIAL PRIMARY KEY, 
+        name VARCHAR(200) NOT NULL,
+        email VARCHAR(200) UNIQUE, 
+        phone VARCHAR(20) NOT NULL,
+        password VARCHAR(255), 
+        address TEXT, 
+        area VARCHAR(100),
+        colony VARCHAR(100), 
+        apartment VARCHAR(100), 
+        flat_no VARCHAR(50),
+        landmark VARCHAR(200), 
+        pincode VARCHAR(10), 
+        city VARCHAR(100),
+        state VARCHAR(100), 
+        registration_number VARCHAR(50),
+        alternate_phone VARCHAR(15),
+        delivery_time VARCHAR(20) DEFAULT 'morning',
+        notes TEXT,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW(),
         is_active BOOLEAN DEFAULT TRUE
       )
     `);
+
+    // ✅ Add missing columns to existing customers table (for databases already created)
+    await client.query(`
+      DO $$ 
+      BEGIN 
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+          WHERE table_name='customers' AND column_name='registration_number') THEN
+          ALTER TABLE customers ADD COLUMN registration_number VARCHAR(50);
+        END IF;
+        
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+          WHERE table_name='customers' AND column_name='alternate_phone') THEN
+          ALTER TABLE customers ADD COLUMN alternate_phone VARCHAR(15);
+        END IF;
+        
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+          WHERE table_name='customers' AND column_name='delivery_time') THEN
+          ALTER TABLE customers ADD COLUMN delivery_time VARCHAR(20) DEFAULT 'morning';
+        END IF;
+        
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+          WHERE table_name='customers' AND column_name='notes') THEN
+          ALTER TABLE customers ADD COLUMN notes TEXT;
+        END IF;
+        
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+          WHERE table_name='customers' AND column_name='updated_at') THEN
+          ALTER TABLE customers ADD COLUMN updated_at TIMESTAMP DEFAULT NOW();
+        END IF;
+      END $$;
+    `);
+
+    console.log('✅ Customers table ready with all required columns');
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS customer_products (
@@ -139,7 +168,6 @@ const createAllTables = async () => {
       )
     `);
 
-    // Recreate daily_delivery with proper structure if it doesn't exist
     await client.query(`
       CREATE TABLE IF NOT EXISTS daily_delivery (
         id SERIAL PRIMARY KEY, 
