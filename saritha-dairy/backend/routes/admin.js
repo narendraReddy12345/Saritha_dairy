@@ -1,4 +1,4 @@
-// routes/admin.js - Version without delivery_time column
+// routes/admin.js
 const express = require('express');
 const router = express.Router();
 const pool = require('../config/db');
@@ -17,6 +17,7 @@ router.get('/customers', verifyToken, isAdmin, async (req, res) => {
   console.log('📋 GET /api/admin/customers called');
   
   try {
+    // First, check if customers table exists
     const tableCheck = await pool.query(`
       SELECT EXISTS (
         SELECT FROM information_schema.tables 
@@ -30,7 +31,13 @@ router.get('/customers', verifyToken, isAdmin, async (req, res) => {
     
     const result = await pool.query(`
       SELECT 
-        c.*,
+        c.id,
+        c.name,
+        c.email,
+        c.phone,
+        c.is_active,
+        c.created_at,
+        c.updated_at,
         cda.delivery_boy_id as assigned_boy_id,
         db.name as assigned_boy_name
       FROM customers c
@@ -39,52 +46,30 @@ router.get('/customers', verifyToken, isAdmin, async (req, res) => {
       ORDER BY c.created_at DESC
     `);
     
-    const customers = [];
-    for (const customer of result.rows) {
-      const productsTableCheck = await pool.query(`
-        SELECT EXISTS (
-          SELECT FROM information_schema.tables 
-          WHERE table_name = 'customer_products'
-        );
-      `);
-      
-      let products = [];
-      if (productsTableCheck.rows[0].exists) {
-        try {
-          const productsResult = await pool.query(
-            'SELECT product_name, pack_size, quantity_per_day as quantity, price FROM customer_products WHERE customer_id = $1',
-            [customer.id]
-          );
-          products = productsResult.rows;
-        } catch (err) {
-          console.log('Products query error:', err.message);
-        }
-      }
-      
-      customers.push({
-        id: customer.id,
-        name: customer.name,
-        email: customer.email,
-        phone: customer.phone,
-        registration_number: customer.registration_number,
-        alternate_phone: customer.alternate_phone,
-        area: customer.area,
-        colony: customer.colony,
-        apartment: customer.apartment,
-        flat_no: customer.flat_no,
-        landmark: customer.landmark,
-        pincode: customer.pincode,
-        city: customer.city,
-        state: customer.state,
-        daily_products: products,
-        notes: customer.notes,
-        is_active: customer.is_active !== false,
-        assigned_boy_id: customer.assigned_boy_id,
-        assigned_boy_name: customer.assigned_boy_name,
-        created_at: customer.created_at,
-        updated_at: customer.updated_at
-      });
-    }
+    const customers = result.rows.map(customer => ({
+      id: customer.id,
+      name: customer.name,
+      email: customer.email,
+      phone: customer.phone,
+      registration_number: null,
+      alternate_phone: null,
+      area: null,
+      colony: null,
+      apartment: null,
+      flat_no: null,
+      landmark: null,
+      pincode: null,
+      city: null,
+      state: null,
+      daily_products: [],
+      delivery_time: 'morning',
+      notes: null,
+      is_active: customer.is_active !== false,
+      assigned_boy_id: customer.assigned_boy_id,
+      assigned_boy_name: customer.assigned_boy_name,
+      created_at: customer.created_at,
+      updated_at: customer.updated_at
+    }));
     
     res.json({ success: true, customers });
   } catch (error) {
@@ -93,14 +78,13 @@ router.get('/customers', verifyToken, isAdmin, async (req, res) => {
   }
 });
 
-// ✅ CREATE customer - WITHOUT delivery_time column
+// ✅ CREATE customer - Works with basic columns only
 router.post('/customers', verifyToken, isAdmin, async (req, res) => {
   console.log('📝 POST /api/admin/customers called');
   console.log('Request body:', JSON.stringify(req.body, null, 2));
   
   const { 
-    name, email, phone, password, registrationNumber, alternatePhone,
-    address, dailyProducts, notes 
+    name, email, phone, password, deliveryTime, notes 
   } = req.body;
   
   // Validate required fields
@@ -119,74 +103,27 @@ router.post('/customers', verifyToken, isAdmin, async (req, res) => {
       hashedPassword = await bcrypt.hash(password, 10);
     }
     
-    // Insert without delivery_time
+    // Insert customer with only basic columns that definitely exist
     const result = await client.query(`
       INSERT INTO customers (
-        name, phone, email, password, notes, is_active, created_at, updated_at
-      ) VALUES ($1, $2, $3, $4, $5, true, NOW(), NOW())
+        name, 
+        phone, 
+        email, 
+        password, 
+        is_active, 
+        created_at, 
+        updated_at
+      ) VALUES ($1, $2, $3, $4, true, NOW(), NOW())
       RETURNING id
     `, [
       name, 
       phone, 
       email || null, 
-      hashedPassword, 
-      notes || ''
+      hashedPassword
     ]);
     
     const customerId = result.rows[0].id;
     console.log(`✅ Customer created with ID: ${customerId}`);
-    
-    // Update additional fields if provided
-    if (registrationNumber || alternatePhone || address) {
-      await client.query(`
-        UPDATE customers 
-        SET registration_number = COALESCE($1, registration_number),
-            alternate_phone = COALESCE($2, alternate_phone),
-            area = COALESCE($3, area),
-            colony = COALESCE($4, colony),
-            apartment = COALESCE($5, apartment),
-            flat_no = COALESCE($6, flat_no),
-            landmark = COALESCE($7, landmark),
-            pincode = COALESCE($8, pincode),
-            city = COALESCE($9, city),
-            state = COALESCE($10, state)
-        WHERE id = $11
-      `, [
-        registrationNumber || null,
-        alternatePhone || null,
-        address?.area || null,
-        address?.colony || null,
-        address?.apartment || null,
-        address?.flatNo || null,
-        address?.landmark || null,
-        address?.pincode || null,
-        address?.city || null,
-        address?.state || null,
-        customerId
-      ]);
-    }
-    
-    // Insert products if any
-    if (dailyProducts && dailyProducts.length > 0) {
-      const tableCheck = await client.query(`
-        SELECT EXISTS (
-          SELECT FROM information_schema.tables 
-          WHERE table_name = 'customer_products'
-        );
-      `);
-      
-      if (tableCheck.rows[0].exists) {
-        for (const product of dailyProducts) {
-          if (product.product_name) {
-            await client.query(`
-              INSERT INTO customer_products (customer_id, product_name, pack_size, quantity_per_day, price)
-              VALUES ($1, $2, $3, $4, $5)
-            `, [customerId, product.product_name, product.pack_size || '500ml', product.quantity || 1, product.price || 0]);
-            console.log(`✅ Product added: ${product.product_name}`);
-          }
-        }
-      }
-    }
     
     await client.query('COMMIT');
     
@@ -210,6 +147,7 @@ router.get('/customers/:customerId/deliveries', verifyToken, isAdmin, async (req
   const { customerId } = req.params;
   
   try {
+    // Check if daily_delivery table exists
     const tableCheck = await pool.query(`
       SELECT EXISTS (
         SELECT FROM information_schema.tables 
@@ -241,7 +179,11 @@ router.get('/customers/:id', verifyToken, isAdmin, async (req, res) => {
   const { id } = req.params;
   
   try {
-    const result = await pool.query('SELECT * FROM customers WHERE id = $1', [id]);
+    const result = await pool.query(`
+      SELECT id, name, email, phone, is_active, created_at, updated_at 
+      FROM customers 
+      WHERE id = $1
+    `, [id]);
     
     if (result.rows.length === 0) {
       return res.status(404).json({ success: false, error: 'Customer not found' });
@@ -249,6 +191,7 @@ router.get('/customers/:id', verifyToken, isAdmin, async (req, res) => {
     
     res.json({ success: true, customer: result.rows[0] });
   } catch (error) {
+    console.error('Error fetching customer:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
@@ -256,81 +199,23 @@ router.get('/customers/:id', verifyToken, isAdmin, async (req, res) => {
 // UPDATE customer
 router.put('/customers/:id', verifyToken, isAdmin, async (req, res) => {
   const { id } = req.params;
-  const { name, email, phone, registrationNumber, alternatePhone, address, dailyProducts, notes, is_active } = req.body;
-  
-  const client = await pool.connect();
+  const { name, email, phone, is_active } = req.body;
   
   try {
-    await client.query('BEGIN');
-    
-    await client.query(`
+    await pool.query(`
       UPDATE customers 
       SET name = $1, 
           email = $2, 
           phone = $3, 
-          registration_number = $4, 
-          alternate_phone = $5,
-          area = $6, 
-          colony = $7, 
-          apartment = $8, 
-          flat_no = $9, 
-          landmark = $10, 
-          pincode = $11, 
-          city = $12, 
-          state = $13, 
-          notes = $14, 
-          is_active = $15, 
+          is_active = $4, 
           updated_at = NOW()
-      WHERE id = $16
-    `, [
-      name, 
-      email, 
-      phone, 
-      registrationNumber || null, 
-      alternatePhone || null,
-      address?.area || null, 
-      address?.colony || null, 
-      address?.apartment || null, 
-      address?.flatNo || null,
-      address?.landmark || null, 
-      address?.pincode || null,
-      address?.city || null, 
-      address?.state || null,
-      notes || null, 
-      is_active !== false, 
-      id
-    ]);
+      WHERE id = $5
+    `, [name, email, phone, is_active !== false, id]);
     
-    const tableCheck = await client.query(`
-      SELECT EXISTS (
-        SELECT FROM information_schema.tables 
-        WHERE table_name = 'customer_products'
-      );
-    `);
-    
-    if (tableCheck.rows[0].exists) {
-      await client.query('DELETE FROM customer_products WHERE customer_id = $1', [id]);
-      
-      if (dailyProducts && dailyProducts.length > 0) {
-        for (const product of dailyProducts) {
-          if (product.product_name) {
-            await client.query(`
-              INSERT INTO customer_products (customer_id, product_name, pack_size, quantity_per_day, price)
-              VALUES ($1, $2, $3, $4, $5)
-            `, [id, product.product_name, product.pack_size || '500ml', product.quantity || 1, product.price || 0]);
-          }
-        }
-      }
-    }
-    
-    await client.query('COMMIT');
     res.json({ success: true, message: 'Customer updated successfully' });
   } catch (error) {
-    await client.query('ROLLBACK');
     console.error('Error updating customer:', error);
     res.status(500).json({ success: false, error: error.message });
-  } finally {
-    client.release();
   }
 });
 
@@ -341,17 +226,31 @@ router.delete('/customers/:id', verifyToken, isAdmin, async (req, res) => {
   try {
     await pool.query('BEGIN');
     
-    const tableCheck = await pool.query(`
+    // Check if customer_delivery_assignments table exists and delete from it
+    const assignmentsCheck = await pool.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_name = 'customer_delivery_assignments'
+      );
+    `);
+    
+    if (assignmentsCheck.rows[0].exists) {
+      await pool.query('DELETE FROM customer_delivery_assignments WHERE customer_id = $1', [id]);
+    }
+    
+    // Check if customer_products table exists and delete from it
+    const productsCheck = await pool.query(`
       SELECT EXISTS (
         SELECT FROM information_schema.tables 
         WHERE table_name = 'customer_products'
       );
     `);
     
-    if (tableCheck.rows[0].exists) {
+    if (productsCheck.rows[0].exists) {
       await pool.query('DELETE FROM customer_products WHERE customer_id = $1', [id]);
     }
     
+    // Delete the customer
     await pool.query('DELETE FROM customers WHERE id = $1', [id]);
     await pool.query('COMMIT');
     
@@ -369,6 +268,7 @@ router.post('/daily-delivery', verifyToken, isAdmin, async (req, res) => {
   const { customer_id, delivery_boy_id, delivery_date, products, status } = req.body;
   
   try {
+    // Check if daily_delivery table exists
     const tableCheck = await pool.query(`
       SELECT EXISTS (
         SELECT FROM information_schema.tables 
@@ -377,13 +277,33 @@ router.post('/daily-delivery', verifyToken, isAdmin, async (req, res) => {
     `);
     
     if (!tableCheck.rows[0].exists) {
-      return res.status(500).json({ success: false, error: 'Daily delivery table does not exist' });
+      // Create the table if it doesn't exist
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS daily_delivery (
+          id SERIAL PRIMARY KEY,
+          customer_id INTEGER REFERENCES customers(id),
+          delivery_boy_id INTEGER,
+          delivery_date DATE,
+          product_name VARCHAR(100),
+          pack_size VARCHAR(20),
+          quantity INTEGER DEFAULT 1,
+          price DECIMAL(10,2),
+          total_amount DECIMAL(10,2),
+          status VARCHAR(20) DEFAULT 'pending',
+          delivered BOOLEAN DEFAULT false,
+          created_at TIMESTAMP,
+          updated_at TIMESTAMP
+        )
+      `);
+      console.log('✅ Created daily_delivery table');
     }
     
     const deliveryDate = delivery_date || new Date().toISOString().split('T')[0];
     
+    // Delete existing deliveries for this customer on this date
     await pool.query('DELETE FROM daily_delivery WHERE customer_id = $1 AND delivery_date = $2', [customer_id, deliveryDate]);
     
+    // Insert each product as a separate delivery record
     for (const product of products) {
       const totalAmount = (product.price || 0) * (product.quantity || 1);
       await pool.query(`
@@ -395,12 +315,47 @@ router.post('/daily-delivery', verifyToken, isAdmin, async (req, res) => {
     
     res.json({ success: true, message: `Delivery recorded for ${products.length} product(s)` });
   } catch (error) {
-    console.error('Error:', error);
+    console.error('Error recording delivery:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
 
-// Alternative endpoint for customer deliveries
+// Get all deliveries for admin
+router.get('/all-deliveries', verifyToken, isAdmin, async (req, res) => {
+  console.log('📋 GET /api/admin/all-deliveries called');
+  
+  try {
+    const tableCheck = await pool.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_name = 'daily_delivery'
+      );
+    `);
+    
+    if (!tableCheck.rows[0].exists) {
+      return res.json({ success: true, deliveries: [] });
+    }
+    
+    const result = await pool.query(`
+      SELECT 
+        dd.*,
+        c.name as customer_name,
+        c.phone as customer_phone,
+        db.name as delivery_boy_name
+      FROM daily_delivery dd
+      JOIN customers c ON dd.customer_id = c.id
+      LEFT JOIN delivery_boys db ON dd.delivery_boy_id = db.id
+      ORDER BY dd.delivery_date DESC, dd.created_at DESC
+    `);
+    
+    res.json({ success: true, deliveries: result.rows });
+  } catch (error) {
+    console.error('Error fetching all deliveries:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Alternative endpoint for customer deliveries (backward compatibility)
 router.get('/customer-deliveries/:customerId', verifyToken, isAdmin, async (req, res) => {
   const { customerId } = req.params;
   
