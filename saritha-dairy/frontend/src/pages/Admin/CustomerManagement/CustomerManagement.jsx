@@ -52,7 +52,6 @@ const CustomerManagement = () => {
     setTimeout(() => setMessage(null), 3500);
   };
 
-  // ✅ FIXED: Use /admin/customers
   const fetchCustomers = async () => {
     setLoading(true);
     try {
@@ -95,9 +94,6 @@ const CustomerManagement = () => {
           updatedAt: c.updated_at
         }));
         setCustomers(formatted);
-      } else {
-        console.error('Failed to load customers:', data.error);
-        showMessage('error', data.error || 'Failed to load customers');
       }
     } catch (error) {
       console.error('Error:', error);
@@ -106,7 +102,6 @@ const CustomerManagement = () => {
     setLoading(false);
   };
 
-  // ✅ FIXED: Use /admin/customers/:customerId/deliveries
   const fetchCustomerDeliveries = async (customerId) => {
     try {
       const response = await fetch(`${API_URL}/admin/customers/${customerId}/deliveries`, {
@@ -144,7 +139,6 @@ const CustomerManagement = () => {
         password: formData.password || undefined
       };
       
-      // ✅ FIXED: Use /admin/customers
       const url = editingCustomer 
         ? `${API_URL}/admin/customers/${editingCustomer.id}`
         : `${API_URL}/admin/customers`;
@@ -178,7 +172,6 @@ const CustomerManagement = () => {
     }
   };
 
-  // ✅ FIXED: Use /admin/customers
   const handleDelete = async (id, name) => {
     if (window.confirm(`Delete customer "${name}"?`)) {
       try {
@@ -203,7 +196,6 @@ const CustomerManagement = () => {
     }
   };
 
-  // ✅ FIXED: Use /admin/customers
   const handleStatusToggle = async (id) => {
     try {
       const customer = customers.find(c => c.id === id);
@@ -227,7 +219,6 @@ const CustomerManagement = () => {
     }
   };
 
-  // ✅ FIXED: Use /admin/daily-delivery
   const recordDelivery = async (customerId) => {
     const products = selectedCustomer?.dailyProducts || [];
     const totalAmount = products.reduce((s, p) => s + ((p.price || 0) * (p.quantity || 1)), 0);
@@ -363,7 +354,6 @@ const CustomerManagement = () => {
         </div>
       </div>
 
-      {/* Stats */}
       <div className="cm-stats-overview">
         <div className="cm-stat-item"><div className="cm-stat-icon">👥</div><div className="cm-stat-info"><h3>{customers.length}</h3><p>Total</p></div></div>
         <div className="cm-stat-item"><div className="cm-stat-icon" style={{background:'#e8f5e9'}}>✅</div><div className="cm-stat-info"><h3>{activeCustomers}</h3><p>Active</p></div></div>
@@ -371,16 +361,14 @@ const CustomerManagement = () => {
         <div className="cm-stat-item"><div className="cm-stat-icon" style={{background:'#e3f2fd'}}>🛵</div><div className="cm-stat-info"><h3>{customers.filter(c => c.assigned_boy_id).length}</h3><p>Assigned</p></div></div>
       </div>
 
-      {/* Search */}
       <div className="cm-toolbar">
         <div className="cm-search-wrapper">
           <span className="cm-search-icon">🔍</span>
-          <input type="text" className="cm-search-input" placeholder="Search customers..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+          <input type="text" className="cm-search-input" placeholder="Search by name, phone, apartment..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
           {searchTerm && <button className="cm-search-clear" onClick={() => setSearchTerm('')}>×</button>}
         </div>
       </div>
 
-      {/* Content */}
       {loading ? (
         <div className="cm-loading-state"><div className="cm-spinner">🥛</div><p>Loading...</p></div>
       ) : filteredCustomers.length === 0 ? (
@@ -420,7 +408,7 @@ const CustomerManagement = () => {
             <table className="cm-table">
               <thead>
                 <tr>
-                  <th>#</th>
+                  
                   <th>Customer</th>
                   <th>Contact</th>
                   <th>Address</th>
@@ -433,31 +421,31 @@ const CustomerManagement = () => {
               <tbody>
                 {filteredCustomers.map((customer, index) => (
                   <tr key={customer.id} className={customer.status === 'inactive' ? 'row-inactive' : ''}>
-                    <td><span className="cm-reg-badge">{customer.registrationNumber || `SD${String(index+1).padStart(4,'0')}`}</span></td>
+                   
                     <td>
                       <div className="cm-customer-cell">
                         <div className="cm-customer-avatar">{customer.name?.charAt(0)}</div>
                         <div>
                           <div className="cm-customer-name">{customer.name}</div>
-                          <small style={{color: '#888'}}>{customer.address?.flatNo ? `Flat ${customer.address.flatNo}` : ''}</small>
+                          
                         </div>
                       </div>
                     </td>
                     <td>
                       <div className="cm-contact-cell">
-                        <div>{customer.phone}</div>
-                        <small>{customer.email || 'N/A'}</small>
+                        <div> {customer.phone}</div>
+                        
                       </div>
                     </td>
                     <td>
                       <div className="cm-address-cell">
-                        <strong>{customer.address?.apartment || 'N/A'}</strong>
-                        <small style={{display: 'block', color: '#888'}}>{customer.address?.area}</small>
+                        <strong>🏢 {customer.address?.apartment || 'N/A'}</strong>
+                        <small style={{display: 'block', color: '#888'}}>📍 {customer.address?.area || 'N/A'}</small>
                       </div>
                     </td>
                     <td>
                       <button className="cm-link-btn" onClick={() => openDeliveryHistory(customer)}>
-                        📦 {customer.dailyProducts?.length || 0} products
+                         {customer.dailyProducts?.length || 0} products
                       </button>
                     </td>
                     <td>
@@ -466,19 +454,19 @@ const CustomerManagement = () => {
                           🛵 {customer.assigned_boy_name}
                         </span>
                       ) : (
-                        <span style={{color: '#999', fontSize: '12px'}}>Unassigned</span>
+                        <span style={{color: '#999', fontSize: '12px'}}>⚡ Unassigned</span>
                       )}
                     </td>
                     <td>
                       <button className={`cm-status-toggle ${customer.status}`} onClick={() => handleStatusToggle(customer.id)}>
-                        {customer.status}
+                        {customer.status === 'active' ? '🟢 Active' : '🔴 Inactive'}
                       </button>
                     </td>
                     <td>
                       <div className="cm-actions">
-                        <button className="cm-btn-icon" onClick={() => openEditModal(customer)} title="Edit">✏️</button>
+                        <button className="cm-btn-icon" onClick={() => openEditModal(customer)} title="Edit Customer">✏️</button>
                         <button className="cm-btn-icon" onClick={() => openDeliveryHistory(customer)} title="Delivery History" style={{background: '#e3f2fd'}}>📦</button>
-                        <button className="cm-btn-icon cm-btn-danger" onClick={() => handleDelete(customer.id, customer.name)} title="Delete">🗑️</button>
+                        <button className="cm-btn-icon cm-btn-danger" onClick={() => handleDelete(customer.id, customer.name)} title="Delete Customer">🗑️</button>
                       </div>
                     </td>
                   </tr>
@@ -489,22 +477,132 @@ const CustomerManagement = () => {
         </div>
       )}
 
-      {/* Add/Edit Modal - Keep your existing modal code */}
+      {/* Add/Edit Modal */}
       {showModal && (
-        // ... your existing modal JSX
         <div className="cm-modal-overlay" onClick={submitting ? undefined : closeModal}>
           <div className="cm-modal-container" onClick={e => e.stopPropagation()}>
             <div className="cm-modal-header">
-              <div><h2>{editingCustomer ? 'Edit Customer' : 'Add New Customer'}</h2></div>
+              <div><h2>{editingCustomer ? '✏️ Edit Customer' : '➕ Add New Customer'}</h2></div>
               <button className="cm-modal-close" onClick={closeModal}>×</button>
             </div>
             
             <form onSubmit={handleSubmit} className="cm-form">
-              {/* Your existing form fields - keep as is */}
+              {/* Step 1: Basic Information */}
+              <div className="cm-form-step">
+                <h3 className="cm-form-title">📋 Basic Information</h3>
+                <div className="cm-form-row">
+                  <div className="cm-form-group">
+                    <label>Full Name *</label>
+                    <input type="text" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} required placeholder="Enter customer name" />
+                  </div>
+                  <div className="cm-form-group">
+                    <label>Phone Number *</label>
+                    <input type="tel" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value.replace(/\D/g,'').slice(0,10)})} required maxLength={10} placeholder="10 digit number" />
+                  </div>
+                </div>
+                <div className="cm-form-row">
+                  <div className="cm-form-group">
+                    <label>Email</label>
+                    <input type="email" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} placeholder="customer@example.com" />
+                  </div>
+                  <div className="cm-form-group">
+                    <label>Password {!editingCustomer && '*'}</label>
+                    <input type="text" value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} required={!editingCustomer} placeholder={editingCustomer ? 'Leave blank to keep same' : 'Set password'} />
+                  </div>
+                </div>
+                <div className="cm-form-row">
+                  <div className="cm-form-group">
+                    <label>Registration No</label>
+                    <input type="text" value={formData.registrationNumber} onChange={e => setFormData({...formData, registrationNumber: e.target.value})} placeholder="Auto-generated" />
+                  </div>
+                  <div className="cm-form-group">
+                    <label>Alternate Phone</label>
+                    <input type="tel" value={formData.alternatePhone} onChange={e => setFormData({...formData, alternatePhone: e.target.value.replace(/\D/g,'').slice(0,10)})} maxLength={10} placeholder="Optional" />
+                  </div>
+                </div>
+                <div className="cm-form-row">
+                  <div className="cm-form-group">
+                    <label>Delivery Time</label>
+                    <select value={formData.deliveryTime} onChange={e => setFormData({...formData, deliveryTime: e.target.value})}>
+                      <option value="morning">🌅 Morning (6 AM - 9 AM)</option>
+                      <option value="evening">🌆 Evening (5 PM - 8 PM)</option>
+                      <option value="both">🔄 Both (Morning & Evening)</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Step 2: Address */}
+              <div className="cm-form-step">
+                <h3 className="cm-form-title">📍 Address Information</h3>
+                <div className="cm-form-row">
+                  <div className="cm-form-group">
+                    <label>Apartment Name *</label>
+                    <input type="text" value={formData.address.apartment} onChange={e => setFormData({...formData, address: {...formData.address, apartment: e.target.value}})} required placeholder="e.g., Sunshine Apartments" />
+                  </div>
+                  <div className="cm-form-group">
+                    <label>Flat/Door No *</label>
+                    <input type="text" value={formData.address.flatNo} onChange={e => setFormData({...formData, address: {...formData.address, flatNo: e.target.value}})} required placeholder="e.g., 201, A-12" />
+                  </div>
+                </div>
+                <div className="cm-form-row">
+                  <div className="cm-form-group">
+                    <label>Area/Colony *</label>
+                    <input type="text" value={formData.address.area} onChange={e => setFormData({...formData, address: {...formData.address, area: e.target.value}})} required placeholder="e.g., KPHB Colony" />
+                  </div>
+                  <div className="cm-form-group">
+                    <label>City *</label>
+                    <input type="text" value={formData.address.city} onChange={e => setFormData({...formData, address: {...formData.address, city: e.target.value}})} required placeholder="e.g., Hyderabad" />
+                  </div>
+                </div>
+                <div className="cm-form-row">
+                  <div className="cm-form-group">
+                    <label>Pincode</label>
+                    <input type="text" value={formData.address.pincode} onChange={e => setFormData({...formData, address: {...formData.address, pincode: e.target.value.replace(/\D/g,'').slice(0,6)}})} maxLength={6} placeholder="6 digit code" />
+                  </div>
+                  <div className="cm-form-group">
+                    <label>Landmark</label>
+                    <input type="text" value={formData.address.landmark} onChange={e => setFormData({...formData, address: {...formData.address, landmark: e.target.value}})} placeholder="Nearby landmark" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Step 3: Products */}
+              <div className="cm-form-step">
+                <div className="cm-form-section-header">
+                  <h3 className="cm-form-title">🥛 Daily Products</h3>
+                  <button type="button" className="cm-btn-add-product" onClick={addProduct}>+ Add Product</button>
+                </div>
+                {formData.dailyProducts.map((product, idx) => (
+                  <div key={idx} className="cm-product-row">
+                    <div className="cm-product-fields">
+                      <input type="text" value={product.product_name} onChange={e => updateProduct(idx, 'product_name', e.target.value)} placeholder="Product Name" />
+                      <input type="text" value={product.pack_size} onChange={e => updateProduct(idx, 'pack_size', e.target.value)} placeholder="Pack Size" />
+                      <div className="cm-product-qty">
+                        <button type="button" onClick={() => updateProduct(idx, 'quantity', Math.max(1, (product.quantity || 1) - 1))}>−</button>
+                        <input type="number" value={product.quantity || 1} onChange={e => updateProduct(idx, 'quantity', parseInt(e.target.value) || 1)} min="1" />
+                        <button type="button" onClick={() => updateProduct(idx, 'quantity', (product.quantity || 1) + 1)}>+</button>
+                      </div>
+                      <div className="cm-product-price">
+                        <span>₹</span>
+                        <input type="number" value={product.price || 0} onChange={e => updateProduct(idx, 'price', parseInt(e.target.value) || 0)} min="0" />
+                      </div>
+                    </div>
+                    {formData.dailyProducts.length > 1 && (
+                      <button type="button" className="cm-btn-remove" onClick={() => removeProduct(idx)}>×</button>
+                    )}
+                  </div>
+                ))}
+                <div className="cm-form-group" style={{marginTop: '20px'}}>
+                  <label>Additional Notes</label>
+                  <textarea value={formData.notes} onChange={e => setFormData({...formData, notes: e.target.value})} rows={3} placeholder="Any special instructions or notes about this customer..." />
+                </div>
+              </div>
+
               <div className="cm-form-footer">
                 <button type="button" className="cm-btn-secondary" onClick={closeModal}>Cancel</button>
                 <button type="submit" className="cm-btn-primary" disabled={submitting}>
-                  {submitting ? '⏳ Saving...' : editingCustomer ? '💾 Update' : '✅ Save Customer'}
+                  {submitting ? '⏳ Saving...' : editingCustomer ? '💾 Update Customer' : '✅ Save Customer'}
                 </button>
               </div>
             </form>
@@ -518,50 +616,50 @@ const CustomerManagement = () => {
           <div className="cm-modal-container" style={{maxWidth: '700px'}} onClick={e => e.stopPropagation()}>
             <div className="cm-modal-header" style={{background: '#f0fdf4', borderRadius: '16px 16px 0 0'}}>
               <div>
-                <h2>📦 Delivery History</h2>
-                <p style={{margin: '4px 0 0', fontSize: '14px', color: '#1a472a'}}>
-                  <strong>{selectedCustomer.name}</strong> | 📱 {selectedCustomer.phone} | 🏢 {selectedCustomer.address?.apartment} | 🚪 {selectedCustomer.address?.flatNo}
+                <h2>📦 Delivery History - {selectedCustomer.name}</h2>
+                <p style={{margin: '4px 0 0', fontSize: '13px', color: '#1a472a'}}>
+                  📱 {selectedCustomer.phone} | 🏢 {selectedCustomer.address?.apartment} | 🚪 Flat {selectedCustomer.address?.flatNo}
                 </p>
               </div>
               <button className="cm-modal-close" onClick={() => setShowDeliveryModal(false)}>×</button>
             </div>
             
             <div style={{padding: '20px'}}>
+              {/* Summary Stats */}
               <div style={{display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', marginBottom: '20px'}}>
                 <div style={{background: '#f0fdf4', padding: '12px', borderRadius: '10px', textAlign: 'center'}}>
                   <div style={{fontSize: '22px', fontWeight: 700, color: '#1a472a'}}>{dailyDeliveries.length}</div>
                   <div style={{fontSize: '11px', color: '#666'}}>Total Deliveries</div>
                 </div>
                 <div style={{background: '#e8f5e9', padding: '12px', borderRadius: '10px', textAlign: 'center'}}>
-                  <div style={{fontSize: '22px', fontWeight: 700, color: '#2e7d32'}}>
-                    {dailyDeliveries.filter(d => d.status === 'delivered').length}
-                  </div>
+                  <div style={{fontSize: '22px', fontWeight: 700, color: '#2e7d32'}}>{dailyDeliveries.filter(d => d.status === 'delivered').length}</div>
                   <div style={{fontSize: '11px', color: '#666'}}>Delivered</div>
                 </div>
                 <div style={{background: '#fff3e0', padding: '12px', borderRadius: '10px', textAlign: 'center'}}>
-                  <div style={{fontSize: '22px', fontWeight: 700, color: '#e65100'}}>
-                    ₹{dailyDeliveries.reduce((s, d) => s + (parseFloat(d.total_amount) || 0), 0).toLocaleString()}
-                  </div>
+                  <div style={{fontSize: '22px', fontWeight: 700, color: '#e65100'}}>₹{dailyDeliveries.reduce((s, d) => s + (parseFloat(d.total_amount) || 0), 0).toLocaleString()}</div>
                   <div style={{fontSize: '11px', color: '#666'}}>Total Amount</div>
                 </div>
               </div>
 
+              {/* Subscribed Products */}
               <div style={{marginBottom: '16px', padding: '12px', background: '#f9fafb', borderRadius: '10px'}}>
-                <h4 style={{margin: '0 0 8px', color: '#1a472a'}}>🥛 Subscribed Products</h4>
+                <h4 style={{margin: '0 0 8px', color: '#1a472a'}}>🥛 Daily Subscription Products</h4>
                 <div style={{display: 'flex', flexWrap: 'wrap', gap: '6px'}}>
-                  {selectedCustomer.dailyProducts?.map((p, i) => (
+                  {selectedCustomer.dailyProducts?.length > 0 ? selectedCustomer.dailyProducts.map((p, i) => (
                     <span key={i} style={{background: '#e8f5e9', color: '#2e7d32', padding: '5px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: 600}}>
                       {p.product_name} {p.pack_size} ×{p.quantity || 1} = ₹{(p.price || 0) * (p.quantity || 1)}
                     </span>
-                  ))}
+                  )) : <span style={{color: '#999'}}>No products subscribed</span>}
                 </div>
               </div>
 
+              {/* Record Delivery Button */}
               <button onClick={() => recordDelivery(selectedCustomer.id)} style={{width: '100%', padding: '12px', background: '#4caf50', color: 'white', border: 'none', borderRadius: '10px', fontWeight: 700, fontSize: '14px', cursor: 'pointer', marginBottom: '20px'}}>
                 ✅ Record Today's Delivery
               </button>
 
-              <h4 style={{color: '#1a472a', marginBottom: '10px'}}>📜 Delivery History</h4>
+              {/* Delivery History Table */}
+              <h4 style={{color: '#1a472a', marginBottom: '10px'}}>📜 Delivery Records</h4>
               {dailyDeliveries.length === 0 ? (
                 <p style={{textAlign: 'center', color: '#999', padding: '20px'}}>No deliveries recorded yet</p>
               ) : (
@@ -569,12 +667,12 @@ const CustomerManagement = () => {
                   <table style={{width: '100%', borderCollapse: 'collapse', fontSize: '12px'}}>
                     <thead>
                       <tr style={{background: '#1a472a', color: 'white'}}>
-                        <th style={{padding: '8px 10px', textAlign: 'left'}}>Date</th>
-                        <th style={{padding: '8px 10px', textAlign: 'left'}}>Product</th>
-                        <th style={{padding: '8px 10px', textAlign: 'left'}}>Qty</th>
-                        <th style={{padding: '8px 10px', textAlign: 'left'}}>Amount</th>
-                        <th style={{padding: '8px 10px', textAlign: 'left'}}>Delivery Boy</th>
-                        <th style={{padding: '8px 10px', textAlign: 'center'}}>Status</th>
+                        <th style={{padding: '8px 10px'}}>Date</th>
+                        <th style={{padding: '8px 10px'}}>Product</th>
+                        <th style={{padding: '8px 10px'}}>Qty</th>
+                        <th style={{padding: '8px 10px'}}>Amount</th>
+                        <th style={{padding: '8px 10px'}}>Delivery Boy</th>
+                        <th style={{padding: '8px 10px'}}>Status</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -587,7 +685,7 @@ const CustomerManagement = () => {
                           <td style={{padding: '8px 10px'}}>{d.delivery_boy_name || 'N/A'}</td>
                           <td style={{padding: '8px 10px', textAlign: 'center'}}>
                             <span style={{padding: '3px 8px', borderRadius: '20px', fontSize: '10px', fontWeight: 700, background: d.status === 'delivered' ? '#e8f5e9' : '#fff3e0', color: d.status === 'delivered' ? '#2e7d32' : '#e65100'}}>
-                              {d.status === 'delivered' ? '✅ Done' : '⏳ Pending'}
+                              {d.status === 'delivered' ? '✅ Delivered' : '⏳ Pending'}
                             </span>
                           </td>
                         </tr>
