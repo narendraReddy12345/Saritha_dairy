@@ -89,17 +89,15 @@ router.get('/customers', verifyToken, isAdmin, async (req, res) => {
   }
 });
 
-// ✅ CREATE customer - Handle optional email properly
+// ✅ CREATE customer
 router.post('/customers', verifyToken, isAdmin, async (req, res) => {
   console.log('📝 POST /api/admin/customers called');
-  console.log('Request body:', JSON.stringify(req.body, null, 2));
   
   const { 
     name, email, phone, password, registrationNumber, alternatePhone,
     address, dailyProducts, deliveryTime, notes 
   } = req.body;
   
-  // Validate required fields
   if (!name || !phone) {
     return res.status(400).json({ success: false, error: 'Name and phone are required' });
   }
@@ -109,7 +107,6 @@ router.post('/customers', verifyToken, isAdmin, async (req, res) => {
   try {
     await client.query('BEGIN');
     
-    // Hash password if provided
     let hashedPassword = null;
     if (password) {
       hashedPassword = await bcrypt.hash(password, 10);
@@ -121,7 +118,7 @@ router.post('/customers', verifyToken, isAdmin, async (req, res) => {
       [phone]
     );
     
-    if (existingCustomer.rows.length > 0 && !editingCustomer) {
+    if (existingCustomer.rows.length > 0) {
       await client.query('ROLLBACK');
       return res.status(400).json({ 
         success: false, 
@@ -129,10 +126,8 @@ router.post('/customers', verifyToken, isAdmin, async (req, res) => {
       });
     }
     
-    // Handle email: if email is empty string, set to null to avoid unique constraint
     const emailValue = email && email.trim() !== '' ? email.trim() : null;
     
-    // Insert customer with ALL fields
     const result = await client.query(`
       INSERT INTO customers (
         name, phone, email, password, 
@@ -141,29 +136,20 @@ router.post('/customers', verifyToken, isAdmin, async (req, res) => {
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
       RETURNING id
     `, [
-      name, 
-      phone, 
-      emailValue,  // Use null if empty
-      hashedPassword,
-      address?.area || null,
-      address?.colony || null,
-      address?.apartment || null,
-      address?.flatNo || null,
-      address?.landmark || null,
-      address?.pincode || null,
-      address?.city || null,
-      address?.state || null,
-      deliveryTime || 'morning',
-      notes || null
+      name, phone, emailValue, hashedPassword,
+      address?.area || null, address?.colony || null, address?.apartment || null,
+      address?.flatNo || null, address?.landmark || null, address?.pincode || null,
+      address?.city || null, address?.state || null,
+      deliveryTime || 'morning', notes || null
     ]);
     
     const customerId = result.rows[0].id;
     console.log(`✅ Customer created with ID: ${customerId}`);
     
-    // Insert products if any
+    // Insert products
     if (dailyProducts && dailyProducts.length > 0) {
       for (const product of dailyProducts) {
-        if (product.product_name) {
+        if (product.product_name && product.product_name.trim() !== '') {
           await client.query(`
             INSERT INTO customer_products (customer_id, product_name, pack_size, quantity_per_day, price)
             VALUES ($1, $2, $3, $4, $5)
@@ -175,22 +161,14 @@ router.post('/customers', verifyToken, isAdmin, async (req, res) => {
     
     await client.query('COMMIT');
     
-    res.json({ 
-      success: true, 
-      message: 'Customer created successfully',
-      customerId: customerId
-    });
+    res.json({ success: true, message: 'Customer created successfully', customerId });
     
   } catch (error) {
     await client.query('ROLLBACK');
     console.error('❌ Error creating customer:', error);
     
-    // Handle duplicate email error
     if (error.code === '23505') {
-      res.status(400).json({ 
-        success: false, 
-        error: 'Email already exists. Please use a different email or leave it blank.' 
-      });
+      res.status(400).json({ success: false, error: 'Email already exists. Please use a different email or leave it blank.' });
     } else {
       res.status(500).json({ success: false, error: error.message });
     }
@@ -199,10 +177,13 @@ router.post('/customers', verifyToken, isAdmin, async (req, res) => {
   }
 });
 
-// UPDATE customer
+// ✅ UPDATE customer - FIXED: Properly deletes old products and inserts new ones
 router.put('/customers/:id', verifyToken, isAdmin, async (req, res) => {
   const { id } = req.params;
-  const { name, email, phone, address, deliveryTime, notes, is_active } = req.body;
+  const { name, email, phone, address, deliveryTime, notes, is_active, dailyProducts } = req.body;
+  
+  console.log(`📝 PUT /api/admin/customers/${id} called`);
+  console.log('Products to save:', JSON.stringify(dailyProducts, null, 2));
   
   const client = await pool.connect();
   
@@ -223,55 +204,50 @@ router.put('/customers/:id', verifyToken, isAdmin, async (req, res) => {
       });
     }
     
-    // Handle email: if email is empty string, set to null
     const emailValue = email && email.trim() !== '' ? email.trim() : null;
     
+    // Update customer basic info
     await client.query(`
       UPDATE customers 
-      SET name = $1, 
-          email = $2, 
-          phone = $3,
-          area = $4, 
-          colony = $5, 
-          apartment = $6, 
-          flat_no = $7,
-          landmark = $8, 
-          pincode = $9, 
-          city = $10, 
-          state = $11,
-          delivery_time = $12, 
-          notes = $13, 
-          is_active = $14
+      SET name = $1, email = $2, phone = $3,
+          area = $4, colony = $5, apartment = $6, flat_no = $7,
+          landmark = $8, pincode = $9, city = $10, state = $11,
+          delivery_time = $12, notes = $13, is_active = $14
       WHERE id = $15
     `, [
-      name, 
-      emailValue,
-      phone,
-      address?.area || null,
-      address?.colony || null,
-      address?.apartment || null,
-      address?.flatNo || null,
-      address?.landmark || null,
-      address?.pincode || null,
-      address?.city || null,
-      address?.state || null,
-      deliveryTime || 'morning',
-      notes || null,
-      is_active !== false,
-      id
+      name, emailValue, phone,
+      address?.area || null, address?.colony || null, address?.apartment || null,
+      address?.flatNo || null, address?.landmark || null, address?.pincode || null,
+      address?.city || null, address?.state || null,
+      deliveryTime || 'morning', notes || null, is_active !== false, id
     ]);
+    
+    // ✅ FIX: Delete ALL existing products for this customer
+    await client.query('DELETE FROM customer_products WHERE customer_id = $1', [id]);
+    console.log(`🗑️ Deleted old products for customer ${id}`);
+    
+    // ✅ Insert the NEW products
+    if (dailyProducts && dailyProducts.length > 0) {
+      for (const product of dailyProducts) {
+        if (product.product_name && product.product_name.trim() !== '') {
+          await client.query(`
+            INSERT INTO customer_products (customer_id, product_name, pack_size, quantity_per_day, price)
+            VALUES ($1, $2, $3, $4, $5)
+          `, [id, product.product_name, product.pack_size || '500ml', product.quantity || 1, product.price || 0]);
+          console.log(`✅ Product added: ${product.product_name} - Qty: ${product.quantity} - Price: ₹${product.price}`);
+        }
+      }
+    }
     
     await client.query('COMMIT');
     res.json({ success: true, message: 'Customer updated successfully' });
+    
   } catch (error) {
     await client.query('ROLLBACK');
     console.error('Error updating customer:', error);
     
     if (error.code === '23505') {
-      res.status(400).json({ 
-        success: false, 
-        error: 'Email already exists. Please use a different email or leave it blank.' 
-      });
+      res.status(400).json({ success: false, error: 'Email already exists. Please use a different email or leave it blank.' });
     } else {
       res.status(500).json({ success: false, error: error.message });
     }
