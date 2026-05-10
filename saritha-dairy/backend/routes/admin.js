@@ -45,7 +45,6 @@ router.get('/customers', verifyToken, isAdmin, async (req, res) => {
     
     const customers = [];
     for (const customer of result.rows) {
-      // Get customer products
       let products = [];
       try {
         const productsResult = await pool.query(
@@ -90,7 +89,7 @@ router.get('/customers', verifyToken, isAdmin, async (req, res) => {
   }
 });
 
-// ✅ CREATE customer - Saves ALL fields including address and products
+// ✅ CREATE customer - Handle optional email properly
 router.post('/customers', verifyToken, isAdmin, async (req, res) => {
   console.log('📝 POST /api/admin/customers called');
   console.log('Request body:', JSON.stringify(req.body, null, 2));
@@ -116,6 +115,23 @@ router.post('/customers', verifyToken, isAdmin, async (req, res) => {
       hashedPassword = await bcrypt.hash(password, 10);
     }
     
+    // Check if customer with same phone already exists
+    const existingCustomer = await client.query(
+      'SELECT id FROM customers WHERE phone = $1',
+      [phone]
+    );
+    
+    if (existingCustomer.rows.length > 0 && !editingCustomer) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Customer with this phone number already exists' 
+      });
+    }
+    
+    // Handle email: if email is empty string, set to null to avoid unique constraint
+    const emailValue = email && email.trim() !== '' ? email.trim() : null;
+    
     // Insert customer with ALL fields
     const result = await client.query(`
       INSERT INTO customers (
@@ -127,7 +143,7 @@ router.post('/customers', verifyToken, isAdmin, async (req, res) => {
     `, [
       name, 
       phone, 
-      email || null, 
+      emailValue,  // Use null if empty
       hashedPassword,
       address?.area || null,
       address?.colony || null,
@@ -168,48 +184,18 @@ router.post('/customers', verifyToken, isAdmin, async (req, res) => {
   } catch (error) {
     await client.query('ROLLBACK');
     console.error('❌ Error creating customer:', error);
-    res.status(500).json({ success: false, error: error.message });
+    
+    // Handle duplicate email error
+    if (error.code === '23505') {
+      res.status(400).json({ 
+        success: false, 
+        error: 'Email already exists. Please use a different email or leave it blank.' 
+      });
+    } else {
+      res.status(500).json({ success: false, error: error.message });
+    }
   } finally {
     client.release();
-  }
-});
-
-// GET single customer
-router.get('/customers/:id', verifyToken, isAdmin, async (req, res) => {
-  const { id } = req.params;
-  
-  try {
-    const result = await pool.query(`
-      SELECT id, name, email, phone, area, colony, apartment, flat_no, 
-             landmark, pincode, city, state, delivery_time, notes
-      FROM customers 
-      WHERE id = $1
-    `, [id]);
-    
-    if (result.rows.length === 0) {
-      return res.status(404).json({ success: false, error: 'Customer not found' });
-    }
-    
-    // Get products
-    let products = [];
-    try {
-      const productsResult = await pool.query(
-        'SELECT product_name, pack_size, quantity_per_day as quantity, price FROM customer_products WHERE customer_id = $1',
-        [id]
-      );
-      products = productsResult.rows;
-    } catch (err) {}
-    
-    res.json({ 
-      success: true, 
-      customer: {
-        ...result.rows[0],
-        daily_products: products
-      }
-    });
-  } catch (error) {
-    console.error('Error fetching customer:', error);
-    res.status(500).json({ success: false, error: error.message });
   }
 });
 
@@ -223,15 +209,44 @@ router.put('/customers/:id', verifyToken, isAdmin, async (req, res) => {
   try {
     await client.query('BEGIN');
     
+    // Check if phone already exists for another customer
+    const existingCustomer = await client.query(
+      'SELECT id FROM customers WHERE phone = $1 AND id != $2',
+      [phone, id]
+    );
+    
+    if (existingCustomer.rows.length > 0) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Another customer with this phone number already exists' 
+      });
+    }
+    
+    // Handle email: if email is empty string, set to null
+    const emailValue = email && email.trim() !== '' ? email.trim() : null;
+    
     await client.query(`
       UPDATE customers 
-      SET name = $1, email = $2, phone = $3,
-          area = $4, colony = $5, apartment = $6, flat_no = $7,
-          landmark = $8, pincode = $9, city = $10, state = $11,
-          delivery_time = $12, notes = $13, is_active = $14
+      SET name = $1, 
+          email = $2, 
+          phone = $3,
+          area = $4, 
+          colony = $5, 
+          apartment = $6, 
+          flat_no = $7,
+          landmark = $8, 
+          pincode = $9, 
+          city = $10, 
+          state = $11,
+          delivery_time = $12, 
+          notes = $13, 
+          is_active = $14
       WHERE id = $15
     `, [
-      name, email, phone,
+      name, 
+      emailValue,
+      phone,
       address?.area || null,
       address?.colony || null,
       address?.apartment || null,
@@ -251,7 +266,15 @@ router.put('/customers/:id', verifyToken, isAdmin, async (req, res) => {
   } catch (error) {
     await client.query('ROLLBACK');
     console.error('Error updating customer:', error);
-    res.status(500).json({ success: false, error: error.message });
+    
+    if (error.code === '23505') {
+      res.status(400).json({ 
+        success: false, 
+        error: 'Email already exists. Please use a different email or leave it blank.' 
+      });
+    } else {
+      res.status(500).json({ success: false, error: error.message });
+    }
   } finally {
     client.release();
   }
