@@ -31,6 +31,17 @@ const CustomerDashboard = () => {
   const [calendarYear, setCalendarYear] = useState(new Date().getFullYear());
   const [isRefreshing, setIsRefreshing] = useState(false);
   
+  // Payment States
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [paymentAmount, setPaymentAmount] = useState('');
+  const [paymentScreenshot, setPaymentScreenshot] = useState(null);
+  const [paymentScreenshotPreview, setPaymentScreenshotPreview] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState('qr');
+  const [paymentHistory, setPaymentHistory] = useState([]);
+  const [walletBalance, setWalletBalance] = useState(0);
+  const [pendingPayments, setPendingPayments] = useState([]);
+  const [showPaymentHistory, setShowPaymentHistory] = useState(false);
+  
   const [preferences, setPreferences] = useState({
     wantMilk: true, skipDays: [], quantity: 2, packSize: '500ml'
   });
@@ -57,10 +68,10 @@ const CustomerDashboard = () => {
     }
     loadCustomerData();
     fetchAllProducts();
+    fetchPaymentData();
     const timer = setInterval(() => setCurrentTime(new Date()), 60000);
     const pulseTimer = setInterval(() => setPulseAnim(p => !p), 3000);
     
-    // Auto-refresh every 15 seconds to sync with delivery updates (faster sync)
     const autoRefreshTimer = setInterval(() => {
       console.log('🔄 Auto-refreshing customer data...');
       syncOrdersWithDeliveries();
@@ -82,12 +93,96 @@ const CustomerDashboard = () => {
     if (confetti) { const t = setTimeout(() => setConfetti(false), 2000); return () => clearTimeout(t); }
   }, [confetti]);
 
-  // ✅ NEW: Function to sync orders with deliveries without full page reload
+  // Fetch payment data
+  const fetchPaymentData = async () => {
+    try {
+      const response = await fetch(`${API_URL}/customer/payments/${userData.id}`, {
+        headers: getAuthHeaders()
+      });
+      const data = await response.json();
+      if (data.success) {
+        setPaymentHistory(data.payments || []);
+        setWalletBalance(data.wallet_balance || 0);
+        setPendingPayments(data.pending_payments || []);
+      }
+    } catch (error) {
+      console.error('Error fetching payments:', error);
+    }
+  };
+
+  // Submit payment request
+  const submitPaymentRequest = async () => {
+    if (!paymentAmount || paymentAmount <= 0) {
+      showMessage('error', 'Please enter a valid amount');
+      return;
+    }
+    
+    if (!paymentScreenshot) {
+      showMessage('error', 'Please upload payment screenshot');
+      return;
+    }
+    
+    setSaving(true);
+    
+    try {
+      const formData = new FormData();
+      formData.append('screenshot', paymentScreenshot);
+      formData.append('customer_id', userData.id);
+      formData.append('amount', paymentAmount);
+      formData.append('payment_method', paymentMethod);
+      
+      const response = await fetch(`${API_URL}/customer/payment-request`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${getToken()}`
+        },
+        body: formData
+      });
+      
+      const data = await response.json();
+      if (data.success) {
+        showMessage('success', 'Payment request submitted successfully!');
+        setShowPaymentModal(false);
+        resetPaymentForm();
+        fetchPaymentData();
+      } else {
+        showMessage('error', data.error || 'Failed to submit payment');
+      }
+    } catch (error) {
+      console.error('Error submitting payment:', error);
+      showMessage('error', 'Failed to submit payment');
+    }
+    
+    setSaving(false);
+  };
+
+  const resetPaymentForm = () => {
+    setPaymentAmount('');
+    setPaymentScreenshot(null);
+    setPaymentScreenshotPreview('');
+    setPaymentMethod('qr');
+  };
+
+  const handleScreenshotUpload = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      if (file.size > 5 * 1024 * 1024) {
+        showMessage('error', 'File size should be less than 5MB');
+        return;
+      }
+      setPaymentScreenshot(file);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setPaymentScreenshotPreview(reader.result);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   const syncOrdersWithDeliveries = async () => {
     try {
       console.log('🔄 Syncing orders with deliveries...');
       
-      // Fetch latest deliveries
       const deliveriesRes = await fetch(`${API_URL}/delivery/customer/${userData.id}`, { 
         headers: getAuthHeaders() 
       });
@@ -99,7 +194,6 @@ const CustomerDashboard = () => {
         setDeliveries(deliveriesList);
       }
       
-      // Fetch latest preferences
       const prefRes = await fetch(`${API_URL}/customer-preferences/${userData.id}`, { 
         headers: getAuthHeaders() 
       });
@@ -111,7 +205,6 @@ const CustomerDashboard = () => {
           try { extraOrdersData = JSON.parse(extraOrdersData); } catch (e) { extraOrdersData = []; }
         }
         
-        // Filter out delivered orders (those that appear in deliveries or have delivered=true)
         const pendingOrders = (Array.isArray(extraOrdersData) ? extraOrdersData : [])
           .map(order => {
             const isDelivered = deliveriesList.some(d => 
@@ -127,7 +220,7 @@ const CustomerDashboard = () => {
               delivered: isDelivered
             };
           })
-          .filter(order => !order.delivered); // Only keep pending orders
+          .filter(order => !order.delivered);
         
         const removedCount = extraOrders.length - pendingOrders.length;
         if (removedCount > 0) {
@@ -161,7 +254,6 @@ const CustomerDashboard = () => {
   const loadCustomerData = async () => {
     setLoading(true);
     try {
-      // Load deliveries first
       const deliveriesRes = await fetch(`${API_URL}/delivery/customer/${userData.id}`, { 
         headers: getAuthHeaders() 
       });
@@ -174,7 +266,6 @@ const CustomerDashboard = () => {
         console.log('✅ Loaded deliveries:', deliveriesList.length);
       }
       
-      // Load preferences including extra orders
       const prefRes = await fetch(`${API_URL}/customer-preferences/${userData.id}`, { 
         headers: getAuthHeaders() 
       });
@@ -198,7 +289,6 @@ const CustomerDashboard = () => {
           skipDays: Array.isArray(skipDays) ? skipDays : []
         });
         
-        // Check if extra orders are delivered and filter out delivered ones
         const ordersWithStatus = (Array.isArray(extraOrdersData) ? extraOrdersData : [])
           .map(order => {
             const isDelivered = deliveriesList.some(d => 
@@ -214,7 +304,7 @@ const CustomerDashboard = () => {
               delivered: isDelivered
             };
           })
-          .filter(order => !order.delivered); // Only keep pending orders
+          .filter(order => !order.delivered);
         
         setExtraOrders(ordersWithStatus);
         console.log('✅ Loaded extra orders (pending only):', ordersWithStatus.length);
@@ -231,6 +321,7 @@ const CustomerDashboard = () => {
     setIsRefreshing(true);
     showMessage('info', '🔄 Refreshing data...');
     await loadCustomerData();
+    await fetchPaymentData();
     showMessage('success', '✅ Data refreshed!');
     setIsRefreshing(false);
   };
@@ -616,7 +707,6 @@ const CustomerDashboard = () => {
           </div>
         </div>
         <div className="cst-header-actions">
-          
           <button className="cst-cart-magic" onClick={()=>setActiveTab('orders')}>
             🛒{cartCount>0&&<span className="cst-cart-dot-magic">{cartCount}</span>}
           </button>
@@ -714,7 +804,7 @@ const CustomerDashboard = () => {
           </>
         )}
 
-        {/* ORDERS TAB - GRID VIEW WITH IMAGES */}
+        {/* ORDERS TAB */}
         {activeTab === 'orders' && (
           <div className="cst-section">
             <h3>🛒 Your Extra Orders</h3>
@@ -726,11 +816,7 @@ const CustomerDashboard = () => {
               </div>
             ) : (
               <>
-                <p className="cst-subtitle">
-                  ⏳ {extraOrders.length} pending order(s)
-                </p>
-                
-                {/* Grid Layout for Orders */}
+                <p className="cst-subtitle">⏳ {extraOrders.length} pending order(s)</p>
                 <div className="cst-orders-grid">
                   {extraOrders.map((order) => (
                     <div key={order.id} className="cst-order-grid-card">
@@ -749,32 +835,20 @@ const CustomerDashboard = () => {
                         </div>
                         <div className="cst-order-grid-price-row">
                           <strong className="cst-order-grid-price">₹{order.price * order.quantity}</strong>
-                          <button 
-                            onClick={() => removeExtraOrder(order.id)} 
-                            className="cst-order-grid-cancel"
-                            title="Cancel order"
-                          >
-                            ✕
-                          </button>
+                          <button onClick={() => removeExtraOrder(order.id)} className="cst-order-grid-cancel" title="Cancel order">✕</button>
                         </div>
-                        <div className="cst-order-grid-date">
-                          📅 {new Date(order.date).toLocaleDateString()}
-                        </div>
-                        <div className="cst-order-status-badge pending">
-                          ⏳ Pending Delivery
-                        </div>
+                        <div className="cst-order-grid-date">📅 {new Date(order.date).toLocaleDateString()}</div>
+                        <div className="cst-order-status-badge pending">⏳ Pending Delivery</div>
                       </div>
                     </div>
                   ))}
                 </div>
-                
-                
               </>
             )}
           </div>
         )}
 
-        {/* BILL TAB */}
+        {/* BILL TAB WITH PAYMENT */}
         {activeTab === 'bill' && (
           <div className="cst-section">
             <div className="cst-bill-innovative">
@@ -787,9 +861,19 @@ const CustomerDashboard = () => {
                   </svg>
                   <div className="cst-bill-amount-inner">
                     <span className="cst-bill-total-label">Payable</span>
-                    <strong className="cst-bill-total-amount">₹{grandTotal.toLocaleString()}</strong>
+                    <strong className="cst-bill-total-amount">₹{(grandTotal - walletBalance).toLocaleString()}</strong>
                   </div>
                 </div>
+              </div>
+              
+              {/* Wallet Balance */}
+              <div className="cst-wallet-card">
+                <div className="cst-wallet-icon">💰</div>
+                <div className="cst-wallet-info">
+                  <span>Wallet Balance</span>
+                  <strong>₹{walletBalance.toLocaleString()}</strong>
+                </div>
+                <button className="cst-wallet-history-btn" onClick={() => setShowPaymentHistory(true)}>📜 History</button>
               </div>
               
               <div className="cst-bill-details">
@@ -806,14 +890,13 @@ const CustomerDashboard = () => {
                 <div className="cst-bill-detail-card extra">
                   <div className="cst-bill-card-icon">📦</div>
                   <div className="cst-bill-card-info">
-                    <h4>Extra Products </h4>
+                    <h4>Extra Products</h4>
                     <p><strong>{deliveredExtraOrders.length} items delivered</strong></p>
-                    
                     <div className="cst-bill-product-list">
                       {deliveredExtraOrders.map((product, idx) => (
                         <div key={`extra-delivery-${idx}`} className="cst-bill-product-item">
-                          <span className="product-name">{product.product_name}  </span>
-                          <span className="product-details">{product.pack_size} × {product.quantity}   = </span>
+                          <span className="product-name">{product.product_name}</span>
+                          <span className="product-details">{product.pack_size} × {product.quantity}</span>
                           <span className="product-price">₹{product.total_amount}</span>
                         </div>
                       ))}
@@ -836,13 +919,30 @@ const CustomerDashboard = () => {
                   <span>₹{extraFromDeliveriesTotal.toLocaleString()}</span>
                 </div>
                 <div className="cst-bill-total-bar-divider"></div>
-                <div className="cst-bill-total-bar-row grand">
-                  <span>Total Payable</span>
+                <div className="cst-bill-total-bar-row">
+                  <span>Total Bill</span>
                   <strong>₹{grandTotal.toLocaleString()}</strong>
+                </div>
+                {walletBalance > 0 && (
+                  <div className="cst-bill-total-bar-row">
+                    <span>💰 Wallet Credit</span>
+                    <span>- ₹{walletBalance.toLocaleString()}</span>
+                  </div>
+                )}
+                <div className="cst-bill-total-bar-row grand">
+                  <span>Amount to Pay</span>
+                  <strong>₹{(grandTotal - walletBalance).toLocaleString()}</strong>
                 </div>
               </div>
               
-             
+              {(grandTotal - walletBalance) > 0 && (
+                <button className="cst-pay-now-btn" onClick={() => setShowPaymentModal(true)}>💳 Pay Now</button>
+              )}
+              
+              {walletBalance > 0 && (
+                <div className="cst-wallet-notice">🎉 You have ₹{walletBalance} credit in your wallet!</div>
+              )}
+              
               <div className="cst-bill-thankyou">
                 <span>🥛</span>
                 <p>Pure by Nature, Trusted by Families</p>
@@ -874,15 +974,9 @@ const CustomerDashboard = () => {
                       })}
                     </span>
                     <div className="cst-history-product">
-                      <span className="cst-history-product-icon">
-                        {delivery.type === 'extra' ? '🛒' : '🥛'}
-                      </span>
-                      <span className="cst-history-product-name">
-                        {delivery.product_name}
-                      </span>
-                      <span className="cst-history-product-details">
-                        {delivery.pack_size} × {delivery.quantity}
-                      </span>
+                      <span className="cst-history-product-icon">{delivery.type === 'extra' ? '🛒' : '🥛'}</span>
+                      <span className="cst-history-product-name">{delivery.product_name}</span>
+                      <span className="cst-history-product-details">{delivery.pack_size} × {delivery.quantity}</span>
                     </div>
                     <div className="cst-history-row-magic">
                       <span className={`cst-badge-magic ${delivery.status}`}>
@@ -1021,6 +1115,115 @@ const CustomerDashboard = () => {
           </button>
         ))}
       </nav>
+
+      {/* Payment Modal */}
+      {showPaymentModal && (
+        <div className="cst-modal-overlay" onClick={() => !saving && setShowPaymentModal(false)}>
+          <div className="cst-payment-modal" onClick={e => e.stopPropagation()}>
+            <div className="cst-payment-header">
+              <h3>💳 Make Payment</h3>
+              <button className="cst-modal-close" onClick={() => setShowPaymentModal(false)}>×</button>
+            </div>
+            
+            <div className="cst-payment-body">
+              <div className="cst-payment-amount">
+                <label>Amount to Pay</label>
+                <div className="cst-amount-input">
+                  <span>₹</span>
+                  <input type="number" value={paymentAmount} onChange={e => setPaymentAmount(e.target.value)} placeholder="Enter amount" min="1" max={grandTotal - walletBalance} />
+                </div>
+                <small>Maximum: ₹{(grandTotal - walletBalance).toLocaleString()}</small>
+              </div>
+              
+              <div className="cst-payment-method">
+                <label>Payment Method</label>
+                <div className="cst-method-options">
+                  <button className={`cst-method-btn ${paymentMethod === 'qr' ? 'active' : ''}`} onClick={() => setPaymentMethod('qr')}>📱 QR Code</button>
+                  <button className={`cst-method-btn ${paymentMethod === 'bank' ? 'active' : ''}`} onClick={() => setPaymentMethod('bank')}>🏦 Bank Transfer</button>
+                  <button className={`cst-method-btn ${paymentMethod === 'upi' ? 'active' : ''}`} onClick={() => setPaymentMethod('upi')}>📲 UPI</button>
+                </div>
+              </div>
+              
+              <div className="cst-qr-section">
+                <div className="cst-qr-code">
+                  <img src="/api/placeholder/200/200" alt="QR Code" />
+                  <p>Scan to Pay</p>
+                </div>
+                <div className="cst-bank-details">
+                  <h4>Bank Details</h4>
+                  <p><strong>Bank:</strong> XYZ Bank</p>
+                  <p><strong>Account Name:</strong> Saritha Dairy</p>
+                  <p><strong>Account No:</strong> XXXXXXXXXXXXXX</p>
+                  <p><strong>IFSC:</strong> XYZB0001234</p>
+                  <p><strong>UPI ID:</strong> sarithadairy@okhdfcbank</p>
+                </div>
+              </div>
+              
+              <div className="cst-screenshot-upload">
+                <label>Upload Payment Screenshot *</label>
+                <div className="cst-upload-area">
+                  {paymentScreenshotPreview ? (
+                    <div className="cst-preview">
+                      <img src={paymentScreenshotPreview} alt="Preview" />
+                      <button onClick={() => { setPaymentScreenshot(null); setPaymentScreenshotPreview(''); }}>Remove</button>
+                    </div>
+                  ) : (
+                    <label className="cst-upload-label">
+                      <span>📸</span>
+                      <span>Click to upload screenshot</span>
+                      <input type="file" accept="image/*" onChange={handleScreenshotUpload} style={{display: 'none'}} />
+                    </label>
+                  )}
+                </div>
+                <small>Upload screenshot of payment confirmation</small>
+              </div>
+              
+              <div className="cst-payment-footer">
+                <button className="cst-btn-cancel" onClick={() => setShowPaymentModal(false)}>Cancel</button>
+                <button className="cst-btn-submit" onClick={submitPaymentRequest} disabled={saving || !paymentAmount || !paymentScreenshot}>
+                  {saving ? 'Submitting...' : 'Submit Payment'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Payment History Modal */}
+      {showPaymentHistory && (
+        <div className="cst-modal-overlay" onClick={() => setShowPaymentHistory(false)}>
+          <div className="cst-history-modal" onClick={e => e.stopPropagation()}>
+            <div className="cst-payment-header">
+              <h3>📜 Payment History</h3>
+              <button className="cst-modal-close" onClick={() => setShowPaymentHistory(false)}>×</button>
+            </div>
+            
+            <div className="cst-payment-history-list">
+              {paymentHistory.length === 0 ? (
+                <div className="cst-empty-history">
+                  <span>📭</span>
+                  <p>No payment history found</p>
+                </div>
+              ) : (
+                paymentHistory.map((payment, idx) => (
+                  <div key={idx} className={`cst-history-item ${payment.status}`}>
+                    <div className="cst-history-left">
+                      <span className="cst-history-date">{new Date(payment.created_at).toLocaleDateString()}</span>
+                      <span className="cst-history-amount">₹{payment.amount}</span>
+                    </div>
+                    <div className="cst-history-right">
+                      <span className={`cst-history-status ${payment.status}`}>
+                        {payment.status === 'approved' ? '✅ Approved' : payment.status === 'pending' ? '⏳ Pending' : '❌ Rejected'}
+                      </span>
+                      {payment.status === 'approved' && <span className="cst-history-credit">+₹{payment.amount} credited</span>}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

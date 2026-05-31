@@ -21,6 +21,8 @@ import ChangePassword from './pages/Customer/ChangePassword';
 import CreditManagement from './pages/Admin/CreditManagement/CreditManagement';
 // Fix the import path - use NonDairyPurchase instead of AddNonDairyPurchase
 import NonDairyPurchase from './pages/Admin/inventory/AddNonDairyPurchase';
+import CustomerUpdates from './pages/Admin/CustomerManagement/CustomerUpdates';
+import PaymentManagement from './pages/Admin/PaymentManagement/PaymentManagement';
 
 function App() {
   return (
@@ -89,7 +91,15 @@ function App() {
     </RoleBasedRoute>
   </ProtectedRoute>
 } />
-          
+          <Route path="/payment-management" element={
+  <ProtectedRoute>
+    <RoleBasedRoute allowedRoles={['admin']}>
+      <AppLayout>
+        <PaymentManagement />
+      </AppLayout>
+    </RoleBasedRoute>
+  </ProtectedRoute>
+} />
           <Route path="/inventory/store-stock" element={
             <ProtectedRoute>
               <RoleBasedRoute allowedRoles={['admin']}>
@@ -167,6 +177,15 @@ function App() {
               </RoleBasedRoute>
             </ProtectedRoute>
           } />
+          <Route path="/customer-updates" element={
+  <ProtectedRoute>
+    <RoleBasedRoute allowedRoles={['admin']}>
+      <AppLayout>
+        <CustomerUpdates />
+      </AppLayout>
+    </RoleBasedRoute>
+  </ProtectedRoute>
+} />
           
           <Route path="/customer/change-password" element={
             <ProtectedRoute>

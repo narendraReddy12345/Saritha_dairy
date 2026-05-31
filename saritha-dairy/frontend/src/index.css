@@ -9,10 +9,33 @@
 html, body {
   height: 100%;
   width: 100%;
-  overflow-x: hidden;
+  overflow-x: auto; /* Changed from 'hidden' to 'auto' to allow horizontal scroll */
   overflow-y: auto;
   -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
   position: relative;
+}
+
+/* For WebKit browsers (Chrome, Safari, Edge) - optional custom scrollbar styling */
+html::-webkit-scrollbar, 
+body::-webkit-scrollbar {
+  width: 8px;
+  height: 8px; /* Height for horizontal scrollbar */
+}
+
+html::-webkit-scrollbar-track, 
+body::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+html::-webkit-scrollbar-thumb, 
+body::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: 4px;
+}
+
+html::-webkit-scrollbar-thumb:hover, 
+body::-webkit-scrollbar-thumb:hover {
+  background: #555;
 }
 
 body {
@@ -21,6 +44,7 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  overflow-x: auto; /* Allow horizontal scroll on body */
 }
 
 #root {
@@ -28,13 +52,14 @@ body {
   width: 100%;
   display: flex;
   flex-direction: column;
-  overflow-x: hidden;
+  overflow-x: auto; /* Changed to allow horizontal scroll */
   position: relative;
 }
 
 /* Ensure all scrollable containers work on mobile */
 .scrollable {
   overflow-y: auto;
+  overflow-x: auto; /* Added to allow horizontal scroll on scrollable containers */
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
 }
@@ -42,5 +67,33 @@ body {
 /* Fix for modals and dialogs on mobile */
 .modal-overlay {
   overflow-y: auto;
+  overflow-x: auto; /* Added to allow horizontal scroll in modals */
   -webkit-overflow-scrolling: touch;
+}
+
+/* Optional: Add white-space handling for horizontal scrolling on specific containers */
+.horizontal-scroll {
+  overflow-x: auto;
+  overflow-y: hidden;
+  white-space: nowrap;
+  -webkit-overflow-scrolling: touch;
+}
+
+.horizontal-scroll > * {
+  display: inline-block;
+  white-space: normal; /* Reset white-space for children if needed */
+}
+
+/* Prevent content from breaking layout when scrolling horizontally */
+img, video, iframe {
+  max-width: 100%;
+  height: auto;
+}
+
+/* For tables or wide content containers */
+.table-container,
+.wide-content {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  width: 100%;
 }

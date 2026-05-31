@@ -15,9 +15,12 @@ const Sidebar = ({ isOpen, onClose, isMobile, isTablet }) => {
     { icon: '📦', label: 'Inventory', path: '/inventory', color: '#10b981' },
     { icon: '🛍️', label: 'Non-Dairy Products', path: '/non-dairy-purchase', color: '#10b981' }, // Changed path to match route
     { icon: '🛒', label: 'Sales', path: '/sales', color: '#8b5cf6' },
-    { icon: '🚚', label: 'Delivery', path: '/delivery', color: '#f59e0b' },
+    { icon: '🚚', label: 'Delivery History', path: '/delivery', color: '#f59e0b' },
     { icon: '👥', label: 'Customers', path: '/admin/customers', color: '#06b6d4' },
+     { icon: '📋', label: 'Customer Updates', path: '/customer-updates', color: '#8b5cf6' },
     { icon: '👨‍💼', label: 'Delivery Boys', path: '/delivery-boys', color: '#ef4444' },
+    // Add to menuItems array in Sidebar.jsx
+{ icon: '💰', label: 'Payments', path: '/payment-management', color: '#10b981' },
     { icon: '📒', label: 'Credit', path: '/credit-management', color: '#f59e0b' },
     { icon: '🔔', label: 'Reminders', path: '/reminders', color: '#f97316' },
   ];
