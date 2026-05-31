@@ -30,7 +30,7 @@ const CustomerManagement = () => {
       landmark: '', pincode: '', city: '', state: ''
     },
     dailyProducts: [
-      { product_name: 'Milk', pack_size: '500ml', quantity: 1, price: 30 }
+      { product_name: 'Milk', pack_size: '500ml', quantity: 1, price: 48}
     ],
     deliveryTime: 'morning',
     notes: ''
