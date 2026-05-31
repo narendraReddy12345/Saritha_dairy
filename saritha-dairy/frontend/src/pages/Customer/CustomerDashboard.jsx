@@ -41,6 +41,15 @@ const CustomerDashboard = () => {
   const [walletBalance, setWalletBalance] = useState(0);
   const [pendingPayments, setPendingPayments] = useState([]);
   const [showPaymentHistory, setShowPaymentHistory] = useState(false);
+  const [paymentSettings, setPaymentSettings] = useState({
+    bank_name: '',
+    account_name: '',
+    account_number: '',
+    ifsc_code: '',
+    upi_id: '',
+    qr_code_url: '',
+    contact_number: ''
+  });
   
   const [preferences, setPreferences] = useState({
     wantMilk: true, skipDays: [], quantity: 2, packSize: '500ml'
@@ -69,6 +78,7 @@ const CustomerDashboard = () => {
     loadCustomerData();
     fetchAllProducts();
     fetchPaymentData();
+    fetchPaymentSettings();
     const timer = setInterval(() => setCurrentTime(new Date()), 60000);
     const pulseTimer = setInterval(() => setPulseAnim(p => !p), 3000);
     
@@ -92,6 +102,21 @@ const CustomerDashboard = () => {
   useEffect(() => {
     if (confetti) { const t = setTimeout(() => setConfetti(false), 2000); return () => clearTimeout(t); }
   }, [confetti]);
+
+  // Fetch payment settings
+  const fetchPaymentSettings = async () => {
+    try {
+      const response = await fetch(`${API_URL}/admin/payment-settings`, {
+        headers: getAuthHeaders()
+      });
+      const data = await response.json();
+      if (data.success && data.settings) {
+        setPaymentSettings(data.settings);
+      }
+    } catch (error) {
+      console.error('Error fetching payment settings:', error);
+    }
+  };
 
   // Fetch payment data
   const fetchPaymentData = async () => {
@@ -1102,7 +1127,7 @@ const CustomerDashboard = () => {
           {id:'bill', icon:'🧾', label:'Bill'},
           {id:'history', icon:'📜', label:'History'},
           {id:'preferences', icon:'🥛', label:'Milk'},
-          
+          {id:'settings', icon:'⚙️', label:'More'},
         ].map(item => (
           <button 
             key={item.id} 
@@ -1146,16 +1171,21 @@ const CustomerDashboard = () => {
               
               <div className="cst-qr-section">
                 <div className="cst-qr-code">
-                  <img src="/api/placeholder/200/200" alt="QR Code" />
+                  {paymentSettings.qr_code_url ? (
+                    <img src={paymentSettings.qr_code_url} alt="QR Code" />
+                  ) : (
+                    <div className="cst-placeholder-qr">📱 QR Code</div>
+                  )}
                   <p>Scan to Pay</p>
                 </div>
                 <div className="cst-bank-details">
                   <h4>Bank Details</h4>
-                  <p><strong>Bank:</strong> XYZ Bank</p>
-                  <p><strong>Account Name:</strong> Saritha Dairy</p>
-                  <p><strong>Account No:</strong> XXXXXXXXXXXXXX</p>
-                  <p><strong>IFSC:</strong> XYZB0001234</p>
-                  <p><strong>UPI ID:</strong> sarithadairy@okhdfcbank</p>
+                  <p><strong>Bank:</strong> {paymentSettings.bank_name || 'XYZ Bank'}</p>
+                  <p><strong>Account Name:</strong> {paymentSettings.account_name || 'Saritha Dairy'}</p>
+                  <p><strong>Account No:</strong> {paymentSettings.account_number || 'XXXXXXXXXXXXXX'}</p>
+                  <p><strong>IFSC:</strong> {paymentSettings.ifsc_code || 'XYZB0001234'}</p>
+                  <p><strong>UPI ID:</strong> {paymentSettings.upi_id || 'sarithadairy@okhdfcbank'}</p>
+                  <p><strong>Contact:</strong> {paymentSettings.contact_number || '9398263810'}</p>
                 </div>
               </div>
               

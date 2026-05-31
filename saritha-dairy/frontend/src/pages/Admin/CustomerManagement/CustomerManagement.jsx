@@ -71,7 +71,7 @@ const CustomerManagement = () => {
           id: c.id,
           name: c.name,
           email: c.email,
-          phone: c.phone,
+          phone: c.phone || '',
           registrationNumber: c.registration_number || `SD${String(c.id).padStart(4, '0')}`,
           alternatePhone: c.alternate_phone || '',
           address: {
@@ -383,7 +383,7 @@ const CustomerManagement = () => {
               </div>
               <h4 className="cm-grid-name">{customer.name}</h4>
               <div className="cm-grid-details">
-                <p>📱 {customer.phone}</p>
+                <p>📱 {customer.phone || 'N/A'}</p>
                 <p>🏢 {customer.address?.apartment || 'N/A'}</p>
                 <p>🚪 Flat: {customer.address?.flatNo || 'N/A'}</p>
                 {customer.assigned_boy_name && <p>🛵 {customer.assigned_boy_name}</p>}
@@ -408,7 +408,6 @@ const CustomerManagement = () => {
             <table className="cm-table">
               <thead>
                 <tr>
-                  
                   <th>Customer</th>
                   <th>Contact</th>
                   <th>Address</th>
@@ -421,20 +420,18 @@ const CustomerManagement = () => {
               <tbody>
                 {filteredCustomers.map((customer, index) => (
                   <tr key={customer.id} className={customer.status === 'inactive' ? 'row-inactive' : ''}>
-                   
                     <td>
                       <div className="cm-customer-cell">
                         <div className="cm-customer-avatar">{customer.name?.charAt(0)}</div>
                         <div>
                           <div className="cm-customer-name">{customer.name}</div>
-                          
                         </div>
                       </div>
                     </td>
                     <td>
                       <div className="cm-contact-cell">
-                        <div> {customer.phone}</div>
-                        
+                        <div>📞 {customer.phone || 'N/A'}</div>
+                        {customer.email && <small>{customer.email}</small>}
                       </div>
                     </td>
                     <td>
@@ -445,7 +442,7 @@ const CustomerManagement = () => {
                     </td>
                     <td>
                       <button className="cm-link-btn" onClick={() => openDeliveryHistory(customer)}>
-                         {customer.dailyProducts?.length || 0} products
+                        {customer.dailyProducts?.length || 0} products
                       </button>
                     </td>
                     <td>
@@ -496,8 +493,9 @@ const CustomerManagement = () => {
                     <input type="text" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} required placeholder="Enter customer name" />
                   </div>
                   <div className="cm-form-group">
-                    <label>Phone Number *</label>
-                    <input type="tel" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value.replace(/\D/g,'').slice(0,10)})} required maxLength={10} placeholder="10 digit number" />
+                    <label>Phone Number (Optional)</label>
+                    <input type="tel" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value.replace(/\D/g,'').slice(0,10)})} maxLength={10} placeholder="10 digit number" />
+                    <small style={{color: '#888', fontSize: '10px'}}>Not required but recommended for contact</small>
                   </div>
                 </div>
                 <div className="cm-form-row">
@@ -618,7 +616,7 @@ const CustomerManagement = () => {
               <div>
                 <h2>📦 Delivery History - {selectedCustomer.name}</h2>
                 <p style={{margin: '4px 0 0', fontSize: '13px', color: '#1a472a'}}>
-                  📱 {selectedCustomer.phone} | 🏢 {selectedCustomer.address?.apartment} | 🚪 Flat {selectedCustomer.address?.flatNo}
+                  📱 {selectedCustomer.phone || 'N/A'} | 🏢 {selectedCustomer.address?.apartment} | 🚪 Flat {selectedCustomer.address?.flatNo}
                 </p>
               </div>
               <button className="cm-modal-close" onClick={() => setShowDeliveryModal(false)}>×</button>
