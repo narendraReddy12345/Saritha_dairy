@@ -454,9 +454,7 @@ const createAllTables = async () => {
         status VARCHAR(20) DEFAULT 'pending',
         reference VARCHAR(255),
         created_at TIMESTAMP DEFAULT NOW(),
-        updated_at TIMESTAMP DEFAULT NOW(),
-        INDEX idx_payment_customer (customer_id),
-        INDEX idx_payment_status (status)
+        updated_at TIMESTAMP DEFAULT NOW()
       )
     `);
 
@@ -469,9 +467,7 @@ const createAllTables = async () => {
         type VARCHAR(20) NOT NULL,
         reference_id INTEGER,
         description TEXT,
-        created_at TIMESTAMP DEFAULT NOW(),
-        INDEX idx_wallet_customer (customer_id),
-        INDEX idx_wallet_type (type)
+        created_at TIMESTAMP DEFAULT NOW()
       )
     `);
 
@@ -501,10 +497,7 @@ const createAllTables = async () => {
         skip_type VARCHAR(20) DEFAULT 'single',
         status VARCHAR(20) DEFAULT 'active',
         created_at TIMESTAMP DEFAULT NOW(),
-        updated_at TIMESTAMP DEFAULT NOW(),
-        INDEX idx_skip_customer (customer_id),
-        INDEX idx_skip_status (status),
-        INDEX idx_skip_dates (start_date, end_date)
+        updated_at TIMESTAMP DEFAULT NOW()
       )
     `);
 
@@ -520,7 +513,7 @@ const createAllTables = async () => {
         extra_orders JSON DEFAULT NULL,
         created_at TIMESTAMP DEFAULT NOW(),
         updated_at TIMESTAMP DEFAULT NOW(),
-        UNIQUE KEY unique_customer_pref (customer_id)
+        UNIQUE(customer_id)
       )
     `);
 
@@ -539,6 +532,15 @@ const createAllTables = async () => {
         END IF;
       END $$;
     `);
+
+    // Create indexes for payment tables
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_payment_customer ON payment_requests(customer_id);`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_payment_status ON payment_requests(status);`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_wallet_customer ON wallet_transactions(customer_id);`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_wallet_type ON wallet_transactions(type);`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_skip_customer ON customer_skips(customer_id);`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_skip_status ON customer_skips(status);`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_skip_dates ON customer_skips(start_date, end_date);`);
 
     // Add triggers for payment tables
     const paymentTables = ['payment_requests', 'customer_skips', 'customer_preferences'];
