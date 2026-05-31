@@ -3,22 +3,24 @@ const pool = require('../config/db');
 
 console.log('💰 Payment Controller Initializing...');
 
-// Helper function to ensure tables exist
+// Helper function to ensure tables exist (PostgreSQL version)
 const ensurePaymentTables = async () => {
   try {
-    // Check if payment_settings table exists
-    const [tables] = await pool.query(`
+    // Check if payment_settings table exists - PostgreSQL way
+    const result = await pool.query(`
       SELECT EXISTS (
         SELECT FROM information_schema.tables 
         WHERE table_name = 'payment_settings'
       ) as exists
     `);
     
-    if (!tables[0].exists) {
+    const tableExists = result.rows[0].exists;
+    
+    if (!tableExists) {
       console.log('Creating payment_settings table...');
       await pool.query(`
         CREATE TABLE IF NOT EXISTS payment_settings (
-          id INT PRIMARY KEY DEFAULT 1,
+          id INTEGER PRIMARY KEY DEFAULT 1,
           bank_name VARCHAR(100),
           account_name VARCHAR(100),
           account_number VARCHAR(50),
@@ -36,6 +38,7 @@ const ensurePaymentTables = async () => {
         VALUES (1, 'Your Bank Name', 'Saritha Dairy', 'XXXXXXXXXXXXXX', 'IFSC0001234', 'sarithadairy@okhdfcbank', '9398263810')
         ON CONFLICT (id) DO NOTHING
       `);
+      console.log('✅ Payment settings table created with default values');
     }
   } catch (error) {
     console.error('Error ensuring payment tables:', error.message);
@@ -50,7 +53,7 @@ ensurePaymentTables();
 // Get all payment requests (Admin)
 const getAllPayments = async (req, res) => {
   try {
-    const [payments] = await pool.query(`
+    const result = await pool.query(`
       SELECT 
         p.*,
         c.name as customer_name,
@@ -61,7 +64,7 @@ const getAllPayments = async (req, res) => {
       ORDER BY p.created_at DESC
     `);
     
-    res.json({ success: true, payments: payments || [] });
+    res.json({ success: true, payments: result.rows || [] });
   } catch (error) {
     console.error('Error fetching payments:', error.message);
     res.json({ success: true, payments: [] });
@@ -73,29 +76,29 @@ const getCustomerPayments = async (req, res) => {
   try {
     const { customerId } = req.params;
     
-    const [payments] = await pool.query(`
+    const paymentsResult = await pool.query(`
       SELECT * FROM payment_requests 
-      WHERE customer_id = ? 
+      WHERE customer_id = $1 
       ORDER BY created_at DESC
     `, [customerId]);
     
-    const [wallet] = await pool.query(`
+    const walletResult = await pool.query(`
       SELECT COALESCE(SUM(amount), 0) as balance
       FROM payment_requests 
-      WHERE customer_id = ? AND status = 'approved'
+      WHERE customer_id = $1 AND status = 'approved'
     `, [customerId]);
     
-    const [pendingPayments] = await pool.query(`
+    const pendingResult = await pool.query(`
       SELECT * FROM payment_requests 
-      WHERE customer_id = ? AND status = 'pending'
+      WHERE customer_id = $1 AND status = 'pending'
       ORDER BY created_at DESC
     `, [customerId]);
     
     res.json({ 
       success: true, 
-      payments: payments || [], 
-      wallet_balance: wallet[0]?.balance || 0,
-      pending_payments: pendingPayments || []
+      payments: paymentsResult.rows || [], 
+      wallet_balance: parseFloat(walletResult.rows[0]?.balance) || 0,
+      pending_payments: pendingResult.rows || []
     });
   } catch (error) {
     console.error('Error fetching customer payments:', error.message);
@@ -113,12 +116,13 @@ const submitPaymentRequest = async (req, res) => {
       return res.status(400).json({ success: false, error: 'Screenshot is required' });
     }
     
-    const [result] = await pool.query(`
+    const result = await pool.query(`
       INSERT INTO payment_requests (customer_id, amount, payment_method, screenshot_url, status, created_at)
-      VALUES (?, ?, ?, ?, 'pending', NOW())
+      VALUES ($1, $2, $3, $4, 'pending', NOW())
+      RETURNING id
     `, [customer_id, amount, payment_method, screenshot_url]);
     
-    res.json({ success: true, payment_id: result.insertId });
+    res.json({ success: true, payment_id: result.rows[0].id });
   } catch (error) {
     console.error('Error submitting payment:', error.message);
     res.status(500).json({ success: false, error: 'Failed to submit payment' });
@@ -130,20 +134,20 @@ const approvePayment = async (req, res) => {
   try {
     const { paymentId } = req.params;
     
-    const [payments] = await pool.query('SELECT * FROM payment_requests WHERE id = ?', [paymentId]);
+    const paymentsResult = await pool.query('SELECT * FROM payment_requests WHERE id = $1', [paymentId]);
     
-    if (payments.length === 0) {
+    if (paymentsResult.rows.length === 0) {
       return res.status(404).json({ success: false, error: 'Payment not found' });
     }
     
-    const payment = payments[0];
+    const payment = paymentsResult.rows[0];
     
-    await pool.query('UPDATE payment_requests SET status = "approved", updated_at = NOW() WHERE id = ?', [paymentId]);
+    await pool.query('UPDATE payment_requests SET status = $1, updated_at = NOW() WHERE id = $2', ['approved', paymentId]);
     
     await pool.query(`
       INSERT INTO wallet_transactions (customer_id, amount, type, reference_id, description, created_at)
-      VALUES (?, ?, 'credit', ?, CONCAT('Payment approved - ID: ', ?), NOW())
-    `, [payment.customer_id, payment.amount, paymentId, paymentId]);
+      VALUES ($1, $2, 'credit', $3, $4, NOW())
+    `, [payment.customer_id, payment.amount, paymentId, `Payment approved - ID: ${paymentId}`]);
     
     res.json({ success: true, message: 'Payment approved and wallet credited' });
   } catch (error) {
@@ -157,7 +161,7 @@ const rejectPayment = async (req, res) => {
   try {
     const { paymentId } = req.params;
     
-    await pool.query('UPDATE payment_requests SET status = "rejected", updated_at = NOW() WHERE id = ?', [paymentId]);
+    await pool.query('UPDATE payment_requests SET status = $1, updated_at = NOW() WHERE id = $2', ['rejected', paymentId]);
     
     res.json({ success: true, message: 'Payment rejected' });
   } catch (error) {
@@ -169,7 +173,7 @@ const rejectPayment = async (req, res) => {
 // Get all customer bills (Admin)
 const getAllCustomerBills = async (req, res) => {
   try {
-    const [bills] = await pool.query(`
+    const result = await pool.query(`
       SELECT 
         c.id as customer_id,
         c.name as customer_name,
@@ -178,7 +182,7 @@ const getAllCustomerBills = async (req, res) => {
           SELECT SUM(total_amount) FROM daily_delivery 
           WHERE customer_id = c.id 
           AND status = 'delivered'
-          AND DATE_FORMAT(delivery_date, '%Y-%m') = DATE_FORMAT(CURRENT_DATE, '%Y-%m')
+          AND TO_CHAR(delivery_date, 'YYYY-MM') = TO_CHAR(CURRENT_DATE, 'YYYY-MM')
         ), 0) as total_bill,
         COALESCE((
           SELECT SUM(amount) FROM payment_requests 
@@ -195,7 +199,7 @@ const getAllCustomerBills = async (req, res) => {
       ORDER BY c.name
     `);
     
-    res.json({ success: true, bills: bills || [] });
+    res.json({ success: true, bills: result.rows || [] });
   } catch (error) {
     console.error('Error fetching customer bills:', error.message);
     res.json({ success: true, bills: [] });
@@ -207,15 +211,16 @@ const manualPaymentAdjustment = async (req, res) => {
   try {
     const { customer_id, amount, reason, payment_date } = req.body;
     
-    const [result] = await pool.query(`
+    const result = await pool.query(`
       INSERT INTO payment_requests (customer_id, amount, payment_method, status, reference, created_at)
-      VALUES (?, ?, 'manual', 'approved', ?, ?)
+      VALUES ($1, $2, 'manual', 'approved', $3, $4)
+      RETURNING id
     `, [customer_id, amount, reason || 'Manual adjustment', payment_date]);
     
     await pool.query(`
       INSERT INTO wallet_transactions (customer_id, amount, type, reference_id, description, created_at)
-      VALUES (?, ?, 'credit', ?, ?, ?)
-    `, [customer_id, amount, result.insertId, reason || 'Manual payment adjustment', payment_date]);
+      VALUES ($1, $2, 'credit', $3, $4, $5)
+    `, [customer_id, amount, result.rows[0].id, reason || 'Manual payment adjustment', payment_date]);
     
     res.json({ success: true, message: 'Manual payment adjustment completed' });
   } catch (error) {
@@ -224,15 +229,15 @@ const manualPaymentAdjustment = async (req, res) => {
   }
 };
 
-// Get payment settings - FIXED
+// Get payment settings - FIXED for PostgreSQL
 const getPaymentSettings = async (req, res) => {
   try {
     // First ensure table exists
     await ensurePaymentTables();
     
-    const [settings] = await pool.query(`SELECT * FROM payment_settings WHERE id = 1`);
+    const result = await pool.query(`SELECT * FROM payment_settings WHERE id = 1`);
     
-    if (!settings || settings.length === 0) {
+    if (!result.rows || result.rows.length === 0) {
       return res.json({ 
         success: true, 
         settings: {
@@ -247,7 +252,7 @@ const getPaymentSettings = async (req, res) => {
       });
     }
     
-    res.json({ success: true, settings: settings[0] });
+    res.json({ success: true, settings: result.rows[0] });
   } catch (error) {
     console.error('Error fetching payment settings:', error.message);
     // Return default settings on error
@@ -266,7 +271,7 @@ const getPaymentSettings = async (req, res) => {
   }
 };
 
-// Update payment settings - FIXED
+// Update payment settings - FIXED for PostgreSQL
 const updatePaymentSettings = async (req, res) => {
   try {
     const { bank_name, account_name, account_number, ifsc_code, upi_id, qr_code_url, contact_number } = req.body;
@@ -277,20 +282,20 @@ const updatePaymentSettings = async (req, res) => {
     await ensurePaymentTables();
     
     // Check if record exists
-    const [existing] = await pool.query(`SELECT * FROM payment_settings WHERE id = 1`);
+    const existingResult = await pool.query(`SELECT * FROM payment_settings WHERE id = 1`);
     
-    if (!existing || existing.length === 0) {
+    if (!existingResult.rows || existingResult.rows.length === 0) {
       // Insert new record
       await pool.query(`
         INSERT INTO payment_settings (id, bank_name, account_name, account_number, ifsc_code, upi_id, qr_code_url, contact_number, updated_at)
-        VALUES (1, ?, ?, ?, ?, ?, ?, ?, NOW())
+        VALUES (1, $1, $2, $3, $4, $5, $6, $7, NOW())
       `, [bank_name || '', account_name || '', account_number || '', ifsc_code || '', upi_id || '', qr_code_url || '', contact_number || '']);
     } else {
       // Update existing record
       await pool.query(`
         UPDATE payment_settings 
-        SET bank_name = ?, account_name = ?, account_number = ?, ifsc_code = ?, 
-            upi_id = ?, qr_code_url = ?, contact_number = ?, updated_at = NOW()
+        SET bank_name = $1, account_name = $2, account_number = $3, ifsc_code = $4, 
+            upi_id = $5, qr_code_url = $6, contact_number = $7, updated_at = NOW()
         WHERE id = 1
       `, [bank_name || '', account_name || '', account_number || '', ifsc_code || '', upi_id || '', qr_code_url || '', contact_number || '']);
     }
@@ -305,13 +310,13 @@ const updatePaymentSettings = async (req, res) => {
 // Get skip records
 const getSkipRecords = async (req, res) => {
   try {
-    const [skips] = await pool.query(`
+    const result = await pool.query(`
       SELECT s.*, c.name as customer_name, c.phone as customer_phone
       FROM customer_skips s
       JOIN customers c ON s.customer_id = c.id
       ORDER BY s.created_at DESC
     `);
-    res.json({ success: true, records: skips || [] });
+    res.json({ success: true, records: result.rows || [] });
   } catch (error) {
     console.error('Error fetching skip records:', error.message);
     res.json({ success: true, records: [] });
@@ -323,12 +328,13 @@ const addManualSkip = async (req, res) => {
   try {
     const { customer_id, start_date, end_date, reason, skip_type } = req.body;
     
-    const [result] = await pool.query(`
+    const result = await pool.query(`
       INSERT INTO customer_skips (customer_id, start_date, end_date, reason, skip_type, status, created_at)
-      VALUES (?, ?, ?, ?, ?, 'active', NOW())
+      VALUES ($1, $2, $3, $4, $5, 'active', NOW())
+      RETURNING id
     `, [customer_id, start_date, end_date || start_date, reason, skip_type]);
     
-    res.json({ success: true, id: result.insertId });
+    res.json({ success: true, id: result.rows[0].id });
   } catch (error) {
     console.error('Error adding manual skip:', error.message);
     res.status(500).json({ success: false, error: 'Failed to add skip' });
@@ -339,7 +345,7 @@ const addManualSkip = async (req, res) => {
 const cancelSkip = async (req, res) => {
   try {
     const { skipId } = req.params;
-    await pool.query(`UPDATE customer_skips SET status = 'cancelled', updated_at = NOW() WHERE id = ?`, [skipId]);
+    await pool.query(`UPDATE customer_skips SET status = 'cancelled', updated_at = NOW() WHERE id = $1`, [skipId]);
     res.json({ success: true, message: 'Skip cancelled' });
   } catch (error) {
     console.error('Error cancelling skip:', error.message);
