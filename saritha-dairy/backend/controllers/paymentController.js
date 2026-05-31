@@ -1,6 +1,50 @@
 // backend/controllers/paymentController.js
 const pool = require('../config/db');
 
+console.log('💰 Payment Controller Initializing...');
+
+// Helper function to ensure tables exist
+const ensurePaymentTables = async () => {
+  try {
+    // Check if payment_settings table exists
+    const [tables] = await pool.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_name = 'payment_settings'
+      ) as exists
+    `);
+    
+    if (!tables[0].exists) {
+      console.log('Creating payment_settings table...');
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS payment_settings (
+          id INT PRIMARY KEY DEFAULT 1,
+          bank_name VARCHAR(100),
+          account_name VARCHAR(100),
+          account_number VARCHAR(50),
+          ifsc_code VARCHAR(20),
+          upi_id VARCHAR(100),
+          qr_code_url VARCHAR(500),
+          contact_number VARCHAR(20),
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+      
+      // Insert default settings
+      await pool.query(`
+        INSERT INTO payment_settings (id, bank_name, account_name, account_number, ifsc_code, upi_id, contact_number)
+        VALUES (1, 'Your Bank Name', 'Saritha Dairy', 'XXXXXXXXXXXXXX', 'IFSC0001234', 'sarithadairy@okhdfcbank', '9398263810')
+        ON CONFLICT (id) DO NOTHING
+      `);
+    }
+  } catch (error) {
+    console.error('Error ensuring payment tables:', error.message);
+  }
+};
+
+// Call this on module load
+ensurePaymentTables();
+
 // ==================== PAYMENT REQUESTS ====================
 
 // Get all payment requests (Admin)
@@ -17,9 +61,9 @@ const getAllPayments = async (req, res) => {
       ORDER BY p.created_at DESC
     `);
     
-    res.json({ success: true, payments });
+    res.json({ success: true, payments: payments || [] });
   } catch (error) {
-    console.error('Error fetching payments:', error);
+    console.error('Error fetching payments:', error.message);
     res.json({ success: true, payments: [] });
   }
 };
@@ -54,7 +98,7 @@ const getCustomerPayments = async (req, res) => {
       pending_payments: pendingPayments || []
     });
   } catch (error) {
-    console.error('Error fetching customer payments:', error);
+    console.error('Error fetching customer payments:', error.message);
     res.json({ success: true, payments: [], wallet_balance: 0, pending_payments: [] });
   }
 };
@@ -76,7 +120,7 @@ const submitPaymentRequest = async (req, res) => {
     
     res.json({ success: true, payment_id: result.insertId });
   } catch (error) {
-    console.error('Error submitting payment:', error);
+    console.error('Error submitting payment:', error.message);
     res.status(500).json({ success: false, error: 'Failed to submit payment' });
   }
 };
@@ -103,7 +147,7 @@ const approvePayment = async (req, res) => {
     
     res.json({ success: true, message: 'Payment approved and wallet credited' });
   } catch (error) {
-    console.error('Error approving payment:', error);
+    console.error('Error approving payment:', error.message);
     res.status(500).json({ success: false, error: 'Failed to approve payment' });
   }
 };
@@ -117,7 +161,7 @@ const rejectPayment = async (req, res) => {
     
     res.json({ success: true, message: 'Payment rejected' });
   } catch (error) {
-    console.error('Error rejecting payment:', error);
+    console.error('Error rejecting payment:', error.message);
     res.status(500).json({ success: false, error: 'Failed to reject payment' });
   }
 };
@@ -134,21 +178,26 @@ const getAllCustomerBills = async (req, res) => {
           SELECT SUM(total_amount) FROM daily_delivery 
           WHERE customer_id = c.id 
           AND status = 'delivered'
-          AND MONTH(delivery_date) = MONTH(CURRENT_DATE())
-          AND YEAR(delivery_date) = YEAR(CURRENT_DATE())
+          AND DATE_FORMAT(delivery_date, '%Y-%m') = DATE_FORMAT(CURRENT_DATE, '%Y-%m')
         ), 0) as total_bill,
         COALESCE((
           SELECT SUM(amount) FROM payment_requests 
           WHERE customer_id = c.id AND status = 'approved'
         ), 0) as paid_amount,
-        0 as wallet_balance
+        COALESCE((
+          SELECT SUM(amount) FROM wallet_transactions 
+          WHERE customer_id = c.id AND type = 'credit'
+        ), 0) - COALESCE((
+          SELECT SUM(amount) FROM wallet_transactions 
+          WHERE customer_id = c.id AND type = 'debit'
+        ), 0) as wallet_balance
       FROM customers c
       ORDER BY c.name
     `);
     
     res.json({ success: true, bills: bills || [] });
   } catch (error) {
-    console.error('Error fetching customer bills:', error);
+    console.error('Error fetching customer bills:', error.message);
     res.json({ success: true, bills: [] });
   }
 };
@@ -170,17 +219,20 @@ const manualPaymentAdjustment = async (req, res) => {
     
     res.json({ success: true, message: 'Manual payment adjustment completed' });
   } catch (error) {
-    console.error('Error processing manual payment:', error);
+    console.error('Error processing manual payment:', error.message);
     res.status(500).json({ success: false, error: 'Failed to process manual payment' });
   }
 };
 
-// Get payment settings
+// Get payment settings - FIXED
 const getPaymentSettings = async (req, res) => {
   try {
+    // First ensure table exists
+    await ensurePaymentTables();
+    
     const [settings] = await pool.query(`SELECT * FROM payment_settings WHERE id = 1`);
     
-    if (settings.length === 0) {
+    if (!settings || settings.length === 0) {
       return res.json({ 
         success: true, 
         settings: {
@@ -197,44 +249,56 @@ const getPaymentSettings = async (req, res) => {
     
     res.json({ success: true, settings: settings[0] });
   } catch (error) {
-    console.error('Error fetching payment settings:', error);
-    res.json({ success: true, settings: {
-      bank_name: 'Your Bank Name',
-      account_name: 'Saritha Dairy',
-      account_number: 'XXXXXXXXXXXXXX',
-      ifsc_code: 'IFSC0001234',
-      upi_id: 'sarithadairy@okhdfcbank',
-      qr_code_url: '',
-      contact_number: '9398263810'
-    } });
+    console.error('Error fetching payment settings:', error.message);
+    // Return default settings on error
+    res.json({ 
+      success: true, 
+      settings: {
+        bank_name: 'Your Bank Name',
+        account_name: 'Saritha Dairy',
+        account_number: 'XXXXXXXXXXXXXX',
+        ifsc_code: 'IFSC0001234',
+        upi_id: 'sarithadairy@okhdfcbank',
+        qr_code_url: '',
+        contact_number: '9398263810'
+      }
+    });
   }
 };
 
-// Update payment settings
+// Update payment settings - FIXED
 const updatePaymentSettings = async (req, res) => {
   try {
     const { bank_name, account_name, account_number, ifsc_code, upi_id, qr_code_url, contact_number } = req.body;
     
+    console.log('Updating payment settings:', { bank_name, account_name, account_number, ifsc_code, upi_id });
+    
+    // First ensure table exists
+    await ensurePaymentTables();
+    
+    // Check if record exists
     const [existing] = await pool.query(`SELECT * FROM payment_settings WHERE id = 1`);
     
-    if (existing.length === 0) {
+    if (!existing || existing.length === 0) {
+      // Insert new record
       await pool.query(`
-        INSERT INTO payment_settings (id, bank_name, account_name, account_number, ifsc_code, upi_id, qr_code_url, contact_number)
-        VALUES (1, ?, ?, ?, ?, ?, ?, ?)
-      `, [bank_name, account_name, account_number, ifsc_code, upi_id, qr_code_url, contact_number]);
+        INSERT INTO payment_settings (id, bank_name, account_name, account_number, ifsc_code, upi_id, qr_code_url, contact_number, updated_at)
+        VALUES (1, ?, ?, ?, ?, ?, ?, ?, NOW())
+      `, [bank_name || '', account_name || '', account_number || '', ifsc_code || '', upi_id || '', qr_code_url || '', contact_number || '']);
     } else {
+      // Update existing record
       await pool.query(`
         UPDATE payment_settings 
         SET bank_name = ?, account_name = ?, account_number = ?, ifsc_code = ?, 
             upi_id = ?, qr_code_url = ?, contact_number = ?, updated_at = NOW()
         WHERE id = 1
-      `, [bank_name, account_name, account_number, ifsc_code, upi_id, qr_code_url, contact_number]);
+      `, [bank_name || '', account_name || '', account_number || '', ifsc_code || '', upi_id || '', qr_code_url || '', contact_number || '']);
     }
     
-    res.json({ success: true, message: 'Payment settings updated' });
+    res.json({ success: true, message: 'Payment settings updated successfully' });
   } catch (error) {
-    console.error('Error updating payment settings:', error);
-    res.status(500).json({ success: false, error: 'Failed to update settings' });
+    console.error('Error updating payment settings:', error.message);
+    res.status(500).json({ success: false, error: error.message });
   }
 };
 
@@ -249,7 +313,7 @@ const getSkipRecords = async (req, res) => {
     `);
     res.json({ success: true, records: skips || [] });
   } catch (error) {
-    console.error('Error fetching skip records:', error);
+    console.error('Error fetching skip records:', error.message);
     res.json({ success: true, records: [] });
   }
 };
@@ -266,7 +330,7 @@ const addManualSkip = async (req, res) => {
     
     res.json({ success: true, id: result.insertId });
   } catch (error) {
-    console.error('Error adding manual skip:', error);
+    console.error('Error adding manual skip:', error.message);
     res.status(500).json({ success: false, error: 'Failed to add skip' });
   }
 };
@@ -278,12 +342,12 @@ const cancelSkip = async (req, res) => {
     await pool.query(`UPDATE customer_skips SET status = 'cancelled', updated_at = NOW() WHERE id = ?`, [skipId]);
     res.json({ success: true, message: 'Skip cancelled' });
   } catch (error) {
-    console.error('Error cancelling skip:', error);
+    console.error('Error cancelling skip:', error.message);
     res.status(500).json({ success: false, error: 'Failed to cancel skip' });
   }
 };
 
-// Make sure ALL functions are exported
+// Export all functions
 module.exports = {
   getAllPayments,
   getCustomerPayments,
