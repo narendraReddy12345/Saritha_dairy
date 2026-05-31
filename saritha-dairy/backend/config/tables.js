@@ -439,7 +439,128 @@ const createAllTables = async () => {
       ON non_dairy_purchase_history(created_at)
     `);
 
-    const tablesWithUpdatedAt = ['products', 'farm_purchases', 'non_dairy_purchases', 'store_stock', 'suppliers', 'non_dairy_stock', 'non_dairy_items'];
+    // ============================================
+    // PAYMENT MANAGEMENT TABLES
+    // ============================================
+
+    // Payment requests table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS payment_requests (
+        id SERIAL PRIMARY KEY,
+        customer_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+        amount DECIMAL(10,2) NOT NULL,
+        payment_method VARCHAR(20) DEFAULT 'qr',
+        screenshot_url VARCHAR(500),
+        status VARCHAR(20) DEFAULT 'pending',
+        reference VARCHAR(255),
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW(),
+        INDEX idx_payment_customer (customer_id),
+        INDEX idx_payment_status (status)
+      )
+    `);
+
+    // Wallet transactions table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS wallet_transactions (
+        id SERIAL PRIMARY KEY,
+        customer_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+        amount DECIMAL(10,2) NOT NULL,
+        type VARCHAR(20) NOT NULL,
+        reference_id INTEGER,
+        description TEXT,
+        created_at TIMESTAMP DEFAULT NOW(),
+        INDEX idx_wallet_customer (customer_id),
+        INDEX idx_wallet_type (type)
+      )
+    `);
+
+    // Payment settings table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS payment_settings (
+        id INTEGER PRIMARY KEY DEFAULT 1,
+        bank_name VARCHAR(100),
+        account_name VARCHAR(100),
+        account_number VARCHAR(50),
+        ifsc_code VARCHAR(20),
+        upi_id VARCHAR(100),
+        qr_code_url VARCHAR(500),
+        contact_number VARCHAR(20),
+        updated_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+
+    // Customer skips table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS customer_skips (
+        id SERIAL PRIMARY KEY,
+        customer_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+        start_date DATE NOT NULL,
+        end_date DATE,
+        reason TEXT,
+        skip_type VARCHAR(20) DEFAULT 'single',
+        status VARCHAR(20) DEFAULT 'active',
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW(),
+        INDEX idx_skip_customer (customer_id),
+        INDEX idx_skip_status (status),
+        INDEX idx_skip_dates (start_date, end_date)
+      )
+    `);
+
+    // Add columns to customer_preferences table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS customer_preferences (
+        id SERIAL PRIMARY KEY,
+        customer_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+        want_milk BOOLEAN DEFAULT TRUE,
+        quantity INTEGER DEFAULT 2,
+        pack_size VARCHAR(20) DEFAULT '500ml',
+        skip_days JSON DEFAULT NULL,
+        extra_orders JSON DEFAULT NULL,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW(),
+        UNIQUE KEY unique_customer_pref (customer_id)
+      )
+    `);
+
+    // Add missing columns to customer_preferences if table already exists
+    await client.query(`
+      DO $$ 
+      BEGIN 
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+          WHERE table_name='customer_preferences' AND column_name='skip_days') THEN
+          ALTER TABLE customer_preferences ADD COLUMN skip_days JSON DEFAULT NULL;
+        END IF;
+        
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+          WHERE table_name='customer_preferences' AND column_name='extra_orders') THEN
+          ALTER TABLE customer_preferences ADD COLUMN extra_orders JSON DEFAULT NULL;
+        END IF;
+      END $$;
+    `);
+
+    // Add triggers for payment tables
+    const paymentTables = ['payment_requests', 'customer_skips', 'customer_preferences'];
+    
+    for (const table of paymentTables) {
+      await client.query(`
+        DROP TRIGGER IF EXISTS update_${table}_updated_at ON ${table};
+        CREATE TRIGGER update_${table}_updated_at
+        BEFORE UPDATE ON ${table}
+        FOR EACH ROW
+        EXECUTE FUNCTION update_updated_at_column();
+      `);
+    }
+
+    // Insert default payment settings if not exists
+    await client.query(`
+      INSERT INTO payment_settings (id, bank_name, account_name, account_number, ifsc_code, upi_id, contact_number)
+      SELECT 1, 'Your Bank Name', 'Saritha Dairy', 'XXXXXXXXXXXXXX', 'IFSC0001234', 'sarithadairy@okhdfcbank', '9398263810'
+      WHERE NOT EXISTS (SELECT 1 FROM payment_settings WHERE id = 1)
+    `);
+
+    const tablesWithUpdatedAt = ['products', 'farm_purchases', 'non_dairy_purchases', 'store_stock', 'suppliers', 'non_dairy_stock', 'non_dairy_items', 'payment_requests', 'customer_skips', 'customer_preferences'];
     
     for (const table of tablesWithUpdatedAt) {
       await client.query(`
@@ -458,6 +579,12 @@ const createAllTables = async () => {
     console.log('📦 Non-dairy items table with image_url column added');
     console.log('📊 Stock movements logging enabled');
     console.log('🏢 Suppliers table created');
+    console.log('💰 Payment Management tables created:');
+    console.log('   - payment_requests');
+    console.log('   - wallet_transactions');
+    console.log('   - payment_settings');
+    console.log('   - customer_skips');
+    console.log('   - customer_preferences (updated with skip_days, extra_orders)');
     
   } catch (error) {
     await client.query('ROLLBACK');

@@ -19,8 +19,9 @@ app.use(cors());
 app.use(express.json());
 app.use('/uploads', express.static('uploads'));
 
-// Create uploads folder
+// Create uploads folder and subfolders
 if (!fs.existsSync('./uploads')) fs.mkdirSync('./uploads');
+if (!fs.existsSync('./uploads/payments')) fs.mkdirSync('./uploads/payments');
 
 // Test route
 app.get('/', (req, res) => {
@@ -56,7 +57,7 @@ app.get('/api/debug/routes', (req, res) => {
   
   res.json({ 
     success: true, 
-    routes: routes.filter(r => r.path.includes('admin') || r.path.includes('customer'))
+    routes: routes.filter(r => r.path.includes('admin') || r.path.includes('customer') || r.path.includes('payment'))
   });
 });
 
@@ -80,6 +81,9 @@ const startServer = async () => {
     app.use('/api/credit', require('./routes/credit'));
     app.use('/api/customer-preferences', require('./routes/customerPreferences'));
     app.use('/api', require('./routes/nonDairyItemsRoutes'));
+    
+    // ✅ NEW: Payment Management Routes
+    app.use('/api', require('./routes/paymentRoutes'));
 
     const { createTable } = require('./controllers/customerPreferences');
     await createTable();
@@ -89,6 +93,20 @@ const startServer = async () => {
     app.listen(PORT, () => {
       console.log(`🚀 Server running on http://localhost:${PORT}`);
       console.log(`🕐 Server time (IST): ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}`);
+      console.log(`💰 Payment Management API endpoints:`);
+      console.log(`   GET    /api/admin/payments`);
+      console.log(`   GET    /api/customer/payments/:customerId`);
+      console.log(`   POST   /api/customer/payment-request`);
+      console.log(`   PUT    /api/admin/payments/:paymentId/approve`);
+      console.log(`   PUT    /api/admin/payments/:paymentId/reject`);
+      console.log(`   GET    /api/admin/customer-bills`);
+      console.log(`   POST   /api/admin/manual-payment-adjustment`);
+      console.log(`   GET    /api/admin/payment-settings`);
+      console.log(`   POST   /api/admin/payment-settings`);
+      console.log(`   POST   /api/admin/upload-qr-code`);
+      console.log(`   GET    /api/admin/skip-records`);
+      console.log(`   POST   /api/admin/manual-skip`);
+      console.log(`   PUT    /api/admin/skips/:skipId/cancel`);
     });
   } catch (error) {
     console.error('❌ Failed to start server:', error.message);
