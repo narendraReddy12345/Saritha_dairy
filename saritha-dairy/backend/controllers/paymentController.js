@@ -1,415 +1,415 @@
-// backend/controllers/paymentController.js
-const pool = require('../config/db');
+    // backend/controllers/paymentController.js
+    const pool = require('../config/db');
 
-console.log('💰 Payment Controller Initializing...');
+    console.log('💰 Payment Controller Initializing...');
 
-// Helper function to ensure tables exist
-const ensurePaymentTables = async () => {
-  try {
-    const result = await pool.query(`
-      SELECT EXISTS (
-        SELECT FROM information_schema.tables 
-        WHERE table_name = 'payment_settings'
-      ) as exists
-    `);
-    
-    const tableExists = result.rows[0].exists;
-    
-    if (!tableExists) {
-      console.log('Creating payment_settings table...');
-      await pool.query(`
-        CREATE TABLE IF NOT EXISTS payment_settings (
-          id INTEGER PRIMARY KEY DEFAULT 1,
-          bank_name VARCHAR(100),
-          account_name VARCHAR(100),
-          account_number VARCHAR(50),
-          ifsc_code VARCHAR(20),
-          upi_id VARCHAR(100),
-          qr_code_url VARCHAR(500),
-          contact_number VARCHAR(20),
-          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-      `);
-      
-      await pool.query(`
-        INSERT INTO payment_settings (id, bank_name, account_name, account_number, ifsc_code, upi_id, contact_number)
-        VALUES (1, 'Your Bank Name', 'Saritha Dairy', 'XXXXXXXXXXXXXX', 'IFSC0001234', 'sarithadairy@okhdfcbank', '9398263810')
-        ON CONFLICT (id) DO NOTHING
-      `);
-      console.log('✅ Payment settings table created');
+    // Helper function to ensure tables exist
+    const ensurePaymentTables = async () => {
+    try {
+        const result = await pool.query(`
+        SELECT EXISTS (
+            SELECT FROM information_schema.tables 
+            WHERE table_name = 'payment_settings'
+        ) as exists
+        `);
+        
+        const tableExists = result.rows[0].exists;
+        
+        if (!tableExists) {
+        console.log('Creating payment_settings table...');
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS payment_settings (
+            id INTEGER PRIMARY KEY DEFAULT 1,
+            bank_name VARCHAR(100),
+            account_name VARCHAR(100),
+            account_number VARCHAR(50),
+            ifsc_code VARCHAR(20),
+            upi_id VARCHAR(100),
+            qr_code_url VARCHAR(500),
+            contact_number VARCHAR(20),
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+        
+        await pool.query(`
+            INSERT INTO payment_settings (id, bank_name, account_name, account_number, ifsc_code, upi_id, contact_number)
+            VALUES (1, 'Your Bank Name', 'Saritha Dairy', 'XXXXXXXXXXXXXX', 'IFSC0001234', 'sarithadairy@okhdfcbank', '9398263810')
+            ON CONFLICT (id) DO NOTHING
+        `);
+        console.log('✅ Payment settings table created');
+        }
+    } catch (error) {
+        console.error('Error ensuring payment tables:', error.message);
     }
-  } catch (error) {
-    console.error('Error ensuring payment tables:', error.message);
-  }
-};
+    };
 
-ensurePaymentTables();
+    ensurePaymentTables();
 
-// ==================== PAYMENT REQUESTS ====================
+    // ==================== PAYMENT REQUESTS ====================
 
-// Get all payment requests (Admin)
-const getAllPayments = async (req, res) => {
-  try {
-    const result = await pool.query(`
-      SELECT 
-        p.*,
-        c.name as customer_name,
-        c.phone as customer_phone,
-        c.email as customer_email
-      FROM payment_requests p
-      JOIN customers c ON p.customer_id = c.id
-      ORDER BY p.created_at DESC
-    `);
-    
-    res.json({ success: true, payments: result.rows || [] });
-  } catch (error) {
-    console.error('Error fetching payments:', error.message);
-    res.json({ success: true, payments: [] });
-  }
-};
-
-// Get customer payments with complete bill details (Customer)
-const getCustomerPayments = async (req, res) => {
-  try {
-    const { customerId } = req.params;
-    
-    // Get payment history
-    const paymentsResult = await pool.query(`
-      SELECT * FROM payment_requests 
-      WHERE customer_id = $1 
-      ORDER BY created_at DESC
-    `, [customerId]);
-    
-    // Get wallet balance (total approved payments)
-    const walletResult = await pool.query(`
-      SELECT COALESCE(SUM(amount), 0) as balance
-      FROM payment_requests 
-      WHERE customer_id = $1 AND status = 'approved'
-    `, [customerId]);
-    
-    // Get pending payments
-    const pendingResult = await pool.query(`
-      SELECT * FROM payment_requests 
-      WHERE customer_id = $1 AND status = 'pending'
-      ORDER BY created_at DESC
-    `, [customerId]);
-    
-    // Get current month's bill details
-    const currentMonthBills = await pool.query(`
-      SELECT 
-        COALESCE(SUM(CASE WHEN product_name = 'Milk' THEN total_amount ELSE 0 END), 0) as milk_charges,
-        COALESCE(SUM(CASE WHEN product_name != 'Milk' THEN total_amount ELSE 0 END), 0) as extra_charges,
-        COALESCE(SUM(total_amount), 0) as total_bill
-      FROM daily_delivery 
-      WHERE customer_id = $1 
-        AND status = 'delivered'
-        AND TO_CHAR(delivery_date, 'YYYY-MM') = TO_CHAR(CURRENT_DATE, 'YYYY-MM')
-    `, [customerId]);
-    
-    // Get total paid amount (all time)
-    const paidResult = await pool.query(`
-      SELECT COALESCE(SUM(amount), 0) as paid_amount
-      FROM payment_requests 
-      WHERE customer_id = $1 AND status = 'approved'
-    `, [customerId]);
-    
-    res.json({ 
-      success: true, 
-      payments: paymentsResult.rows || [],
-      wallet_balance: parseFloat(walletResult.rows[0]?.balance) || 0,
-      pending_payments: pendingResult.rows || [],
-      current_bill: {
-        milk_charges: parseFloat(currentMonthBills.rows[0]?.milk_charges) || 0,
-        extra_charges: parseFloat(currentMonthBills.rows[0]?.extra_charges) || 0,
-        total_bill: parseFloat(currentMonthBills.rows[0]?.total_bill) || 0,
-        paid_amount: parseFloat(paidResult.rows[0]?.paid_amount) || 0,
-        pending_amount: Math.max(0, parseFloat(currentMonthBills.rows[0]?.total_bill) - parseFloat(paidResult.rows[0]?.paid_amount))
-      }
-    });
-  } catch (error) {
-    console.error('Error fetching customer payments:', error.message);
-    res.json({ 
-      success: true, 
-      payments: [], 
-      wallet_balance: 0, 
-      pending_payments: [],
-      current_bill: { milk_charges: 0, extra_charges: 0, total_bill: 0, paid_amount: 0, pending_amount: 0 }
-    });
-  }
-};
-
-// Submit payment request (Customer)
-const submitPaymentRequest = async (req, res) => {
-  try {
-    const { customer_id, amount, payment_method } = req.body;
-    const screenshot_url = req.file ? `/uploads/payments/${req.file.filename}` : null;
-    
-    if (!screenshot_url) {
-      return res.status(400).json({ success: false, error: 'Screenshot is required' });
-    }
-    
-    const result = await pool.query(`
-      INSERT INTO payment_requests (customer_id, amount, payment_method, screenshot_url, status, created_at)
-      VALUES ($1, $2, $3, $4, 'pending', NOW())
-      RETURNING id
-    `, [customer_id, amount, payment_method, screenshot_url]);
-    
-    res.json({ success: true, payment_id: result.rows[0].id });
-  } catch (error) {
-    console.error('Error submitting payment:', error.message);
-    res.status(500).json({ success: false, error: 'Failed to submit payment' });
-  }
-};
-
-// Approve payment (Admin)
-const approvePayment = async (req, res) => {
-  try {
-    const { paymentId } = req.params;
-    
-    const paymentsResult = await pool.query('SELECT * FROM payment_requests WHERE id = $1', [paymentId]);
-    
-    if (paymentsResult.rows.length === 0) {
-      return res.status(404).json({ success: false, error: 'Payment not found' });
-    }
-    
-    const payment = paymentsResult.rows[0];
-    
-    await pool.query('UPDATE payment_requests SET status = $1, updated_at = NOW() WHERE id = $2', ['approved', paymentId]);
-    
-    await pool.query(`
-      INSERT INTO wallet_transactions (customer_id, amount, type, reference_id, description, created_at)
-      VALUES ($1, $2, 'credit', $3, $4, NOW())
-    `, [payment.customer_id, payment.amount, paymentId, `Payment approved - ID: ${paymentId}`]);
-    
-    res.json({ success: true, message: 'Payment approved and wallet credited' });
-  } catch (error) {
-    console.error('Error approving payment:', error.message);
-    res.status(500).json({ success: false, error: 'Failed to approve payment' });
-  }
-};
-
-// Reject payment (Admin)
-const rejectPayment = async (req, res) => {
-  try {
-    const { paymentId } = req.params;
-    await pool.query('UPDATE payment_requests SET status = $1, updated_at = NOW() WHERE id = $2', ['rejected', paymentId]);
-    res.json({ success: true, message: 'Payment rejected' });
-  } catch (error) {
-    console.error('Error rejecting payment:', error.message);
-    res.status(500).json({ success: false, error: 'Failed to reject payment' });
-  }
-};
-
-// Get all customer bills for admin (complete billing details) - FIXED
-const getAllCustomerBills = async (req, res) => {
-  try {
-    // First, get all customers
-    const customersResult = await pool.query(`
-      SELECT id, name, phone FROM customers ORDER BY name
-    `);
-    
-    const bills = [];
-    
-    for (const customer of customersResult.rows) {
-      // Get current month's bill details
-      const billResult = await pool.query(`
+    // Get all payment requests (Admin)
+    const getAllPayments = async (req, res) => {
+    try {
+        const result = await pool.query(`
         SELECT 
-          COALESCE(SUM(CASE WHEN product_name = 'Milk' THEN total_amount ELSE 0 END), 0) as milk_charges,
-          COALESCE(SUM(CASE WHEN product_name != 'Milk' THEN total_amount ELSE 0 END), 0) as extra_charges,
-          COALESCE(SUM(total_amount), 0) as total_bill
+            p.*,
+            c.name as customer_name,
+            c.phone as customer_phone,
+            c.email as customer_email
+        FROM payment_requests p
+        JOIN customers c ON p.customer_id = c.id
+        ORDER BY p.created_at DESC
+        `);
+        
+        res.json({ success: true, payments: result.rows || [] });
+    } catch (error) {
+        console.error('Error fetching payments:', error.message);
+        res.json({ success: true, payments: [] });
+    }
+    };
+
+    // Get customer payments with complete bill details (Customer)
+    const getCustomerPayments = async (req, res) => {
+    try {
+        const { customerId } = req.params;
+        
+        // Get payment history
+        const paymentsResult = await pool.query(`
+        SELECT * FROM payment_requests 
+        WHERE customer_id = $1 
+        ORDER BY created_at DESC
+        `, [customerId]);
+        
+        // Get wallet balance (total approved payments)
+        const walletResult = await pool.query(`
+        SELECT COALESCE(SUM(amount), 0) as balance
+        FROM payment_requests 
+        WHERE customer_id = $1 AND status = 'approved'
+        `, [customerId]);
+        
+        // Get pending payments
+        const pendingResult = await pool.query(`
+        SELECT * FROM payment_requests 
+        WHERE customer_id = $1 AND status = 'pending'
+        ORDER BY created_at DESC
+        `, [customerId]);
+        
+        // Get current month's bill details
+        const currentMonthBills = await pool.query(`
+        SELECT 
+            COALESCE(SUM(CASE WHEN product_name = 'Milk' THEN total_amount ELSE 0 END), 0) as milk_charges,
+            COALESCE(SUM(CASE WHEN product_name != 'Milk' THEN total_amount ELSE 0 END), 0) as extra_charges,
+            COALESCE(SUM(total_amount), 0) as total_bill
         FROM daily_delivery 
         WHERE customer_id = $1 
-          AND status = 'delivered'
-          AND TO_CHAR(delivery_date, 'YYYY-MM') = TO_CHAR(CURRENT_DATE, 'YYYY-MM')
-      `, [customer.id]);
-      
-      // Get paid amount
-      const paidResult = await pool.query(`
+            AND status = 'delivered'
+            AND TO_CHAR(delivery_date, 'YYYY-MM') = TO_CHAR(CURRENT_DATE, 'YYYY-MM')
+        `, [customerId]);
+        
+        // Get total paid amount (all time)
+        const paidResult = await pool.query(`
         SELECT COALESCE(SUM(amount), 0) as paid_amount
         FROM payment_requests 
         WHERE customer_id = $1 AND status = 'approved'
-      `, [customer.id]);
-      
-      // Get wallet balance
-      const walletResult = await pool.query(`
-        SELECT COALESCE(SUM(amount), 0) as wallet_balance
-        FROM payment_requests 
-        WHERE customer_id = $1 AND status = 'approved'
-      `, [customer.id]);
-      
-      const totalBill = parseFloat(billResult.rows[0]?.total_bill) || 0;
-      const paidAmount = parseFloat(paidResult.rows[0]?.paid_amount) || 0;
-      const pendingAmount = Math.max(0, totalBill - paidAmount);
-      
-      bills.push({
-        customer_id: customer.id,
-        customer_name: customer.name,
-        customer_phone: customer.phone,
-        milk_charges: parseFloat(billResult.rows[0]?.milk_charges) || 0,
-        extra_charges: parseFloat(billResult.rows[0]?.extra_charges) || 0,
-        total_bill: totalBill,
-        paid_amount: paidAmount,
-        pending_amount: pendingAmount,
-        wallet_balance: parseFloat(walletResult.rows[0]?.wallet_balance) || 0
-      });
+        `, [customerId]);
+        
+        res.json({ 
+        success: true, 
+        payments: paymentsResult.rows || [],
+        wallet_balance: parseFloat(walletResult.rows[0]?.balance) || 0,
+        pending_payments: pendingResult.rows || [],
+        current_bill: {
+            milk_charges: parseFloat(currentMonthBills.rows[0]?.milk_charges) || 0,
+            extra_charges: parseFloat(currentMonthBills.rows[0]?.extra_charges) || 0,
+            total_bill: parseFloat(currentMonthBills.rows[0]?.total_bill) || 0,
+            paid_amount: parseFloat(paidResult.rows[0]?.paid_amount) || 0,
+            pending_amount: Math.max(0, parseFloat(currentMonthBills.rows[0]?.total_bill) - parseFloat(paidResult.rows[0]?.paid_amount))
+        }
+        });
+    } catch (error) {
+        console.error('Error fetching customer payments:', error.message);
+        res.json({ 
+        success: true, 
+        payments: [], 
+        wallet_balance: 0, 
+        pending_payments: [],
+        current_bill: { milk_charges: 0, extra_charges: 0, total_bill: 0, paid_amount: 0, pending_amount: 0 }
+        });
     }
-    
-    res.json({ success: true, bills });
-  } catch (error) {
-    console.error('Error fetching customer bills:', error.message);
-    res.json({ success: true, bills: [] });
-  }
-};
+    };
 
-// Manual payment adjustment (Admin)
-const manualPaymentAdjustment = async (req, res) => {
-  try {
-    const { customer_id, amount, reason, payment_date } = req.body;
-    
-    const result = await pool.query(`
-      INSERT INTO payment_requests (customer_id, amount, payment_method, status, reference, created_at)
-      VALUES ($1, $2, 'manual', 'approved', $3, $4)
-      RETURNING id
-    `, [customer_id, amount, reason || 'Manual adjustment', payment_date]);
-    
-    await pool.query(`
-      INSERT INTO wallet_transactions (customer_id, amount, type, reference_id, description, created_at)
-      VALUES ($1, $2, 'credit', $3, $4, $5)
-    `, [customer_id, amount, result.rows[0].id, reason || 'Manual payment adjustment', payment_date]);
-    
-    res.json({ success: true, message: 'Manual payment adjustment completed' });
-  } catch (error) {
-    console.error('Error processing manual payment:', error.message);
-    res.status(500).json({ success: false, error: 'Failed to process manual payment' });
-  }
-};
+    // Submit payment request (Customer)
+    const submitPaymentRequest = async (req, res) => {
+    try {
+        const { customer_id, amount, payment_method } = req.body;
+        const screenshot_url = req.file ? `/uploads/payments/${req.file.filename}` : null;
+        
+        if (!screenshot_url) {
+        return res.status(400).json({ success: false, error: 'Screenshot is required' });
+        }
+        
+        const result = await pool.query(`
+        INSERT INTO payment_requests (customer_id, amount, payment_method, screenshot_url, status, created_at)
+        VALUES ($1, $2, $3, $4, 'pending', NOW())
+        RETURNING id
+        `, [customer_id, amount, payment_method, screenshot_url]);
+        
+        res.json({ success: true, payment_id: result.rows[0].id });
+    } catch (error) {
+        console.error('Error submitting payment:', error.message);
+        res.status(500).json({ success: false, error: 'Failed to submit payment' });
+    }
+    };
 
-// Get payment settings
-const getPaymentSettings = async (req, res) => {
-  try {
-    await ensurePaymentTables();
-    const result = await pool.query(`SELECT * FROM payment_settings WHERE id = 1`);
-    
-    if (!result.rows || result.rows.length === 0) {
-      return res.json({ 
+    // Approve payment (Admin)
+    const approvePayment = async (req, res) => {
+    try {
+        const { paymentId } = req.params;
+        
+        const paymentsResult = await pool.query('SELECT * FROM payment_requests WHERE id = $1', [paymentId]);
+        
+        if (paymentsResult.rows.length === 0) {
+        return res.status(404).json({ success: false, error: 'Payment not found' });
+        }
+        
+        const payment = paymentsResult.rows[0];
+        
+        await pool.query('UPDATE payment_requests SET status = $1, updated_at = NOW() WHERE id = $2', ['approved', paymentId]);
+        
+        await pool.query(`
+        INSERT INTO wallet_transactions (customer_id, amount, type, reference_id, description, created_at)
+        VALUES ($1, $2, 'credit', $3, $4, NOW())
+        `, [payment.customer_id, payment.amount, paymentId, `Payment approved - ID: ${paymentId}`]);
+        
+        res.json({ success: true, message: 'Payment approved and wallet credited' });
+    } catch (error) {
+        console.error('Error approving payment:', error.message);
+        res.status(500).json({ success: false, error: 'Failed to approve payment' });
+    }
+    };
+
+    // Reject payment (Admin)
+    const rejectPayment = async (req, res) => {
+    try {
+        const { paymentId } = req.params;
+        await pool.query('UPDATE payment_requests SET status = $1, updated_at = NOW() WHERE id = $2', ['rejected', paymentId]);
+        res.json({ success: true, message: 'Payment rejected' });
+    } catch (error) {
+        console.error('Error rejecting payment:', error.message);
+        res.status(500).json({ success: false, error: 'Failed to reject payment' });
+    }
+    };
+
+    // Get all customer bills for admin (complete billing details) - FIXED
+    const getAllCustomerBills = async (req, res) => {
+    try {
+        // First, get all customers
+        const customersResult = await pool.query(`
+        SELECT id, name, phone FROM customers ORDER BY name
+        `);
+        
+        const bills = [];
+        
+        for (const customer of customersResult.rows) {
+        // Get current month's bill details
+        const billResult = await pool.query(`
+            SELECT 
+            COALESCE(SUM(CASE WHEN product_name = 'Milk' THEN total_amount ELSE 0 END), 0) as milk_charges,
+            COALESCE(SUM(CASE WHEN product_name != 'Milk' THEN total_amount ELSE 0 END), 0) as extra_charges,
+            COALESCE(SUM(total_amount), 0) as total_bill
+            FROM daily_delivery 
+            WHERE customer_id = $1 
+            AND status = 'delivered'
+            AND TO_CHAR(delivery_date, 'YYYY-MM') = TO_CHAR(CURRENT_DATE, 'YYYY-MM')
+        `, [customer.id]);
+        
+        // Get paid amount
+        const paidResult = await pool.query(`
+            SELECT COALESCE(SUM(amount), 0) as paid_amount
+            FROM payment_requests 
+            WHERE customer_id = $1 AND status = 'approved'
+        `, [customer.id]);
+        
+        // Get wallet balance
+        const walletResult = await pool.query(`
+            SELECT COALESCE(SUM(amount), 0) as wallet_balance
+            FROM payment_requests 
+            WHERE customer_id = $1 AND status = 'approved'
+        `, [customer.id]);
+        
+        const totalBill = parseFloat(billResult.rows[0]?.total_bill) || 0;
+        const paidAmount = parseFloat(paidResult.rows[0]?.paid_amount) || 0;
+        const pendingAmount = Math.max(0, totalBill - paidAmount);
+        
+        bills.push({
+            customer_id: customer.id,
+            customer_name: customer.name,
+            customer_phone: customer.phone,
+            milk_charges: parseFloat(billResult.rows[0]?.milk_charges) || 0,
+            extra_charges: parseFloat(billResult.rows[0]?.extra_charges) || 0,
+            total_bill: totalBill,
+            paid_amount: paidAmount,
+            pending_amount: pendingAmount,
+            wallet_balance: parseFloat(walletResult.rows[0]?.wallet_balance) || 0
+        });
+        }
+        
+        res.json({ success: true, bills });
+    } catch (error) {
+        console.error('Error fetching customer bills:', error.message);
+        res.json({ success: true, bills: [] });
+    }
+    };
+
+    // Manual payment adjustment (Admin)
+    const manualPaymentAdjustment = async (req, res) => {
+    try {
+        const { customer_id, amount, reason, payment_date } = req.body;
+        
+        const result = await pool.query(`
+        INSERT INTO payment_requests (customer_id, amount, payment_method, status, reference, created_at)
+        VALUES ($1, $2, 'manual', 'approved', $3, $4)
+        RETURNING id
+        `, [customer_id, amount, reason || 'Manual adjustment', payment_date]);
+        
+        await pool.query(`
+        INSERT INTO wallet_transactions (customer_id, amount, type, reference_id, description, created_at)
+        VALUES ($1, $2, 'credit', $3, $4, $5)
+        `, [customer_id, amount, result.rows[0].id, reason || 'Manual payment adjustment', payment_date]);
+        
+        res.json({ success: true, message: 'Manual payment adjustment completed' });
+    } catch (error) {
+        console.error('Error processing manual payment:', error.message);
+        res.status(500).json({ success: false, error: 'Failed to process manual payment' });
+    }
+    };
+
+    // Get payment settings
+    const getPaymentSettings = async (req, res) => {
+    try {
+        await ensurePaymentTables();
+        const result = await pool.query(`SELECT * FROM payment_settings WHERE id = 1`);
+        
+        if (!result.rows || result.rows.length === 0) {
+        return res.json({ 
+            success: true, 
+            settings: {
+            bank_name: 'Your Bank Name',
+            account_name: 'Saritha Dairy',
+            account_number: 'XXXXXXXXXXXXXX',
+            ifsc_code: 'IFSC0001234',
+            upi_id: 'sarithadairy@okhdfcbank',
+            qr_code_url: '',
+            contact_number: '9398263810'
+            }
+        });
+        }
+        
+        res.json({ success: true, settings: result.rows[0] });
+    } catch (error) {
+        console.error('Error fetching payment settings:', error.message);
+        res.json({ 
         success: true, 
         settings: {
-          bank_name: 'Your Bank Name',
-          account_name: 'Saritha Dairy',
-          account_number: 'XXXXXXXXXXXXXX',
-          ifsc_code: 'IFSC0001234',
-          upi_id: 'sarithadairy@okhdfcbank',
-          qr_code_url: '',
-          contact_number: '9398263810'
+            bank_name: 'Your Bank Name',
+            account_name: 'Saritha Dairy',
+            account_number: 'XXXXXXXXXXXXXX',
+            ifsc_code: 'IFSC0001234',
+            upi_id: 'sarithadairy@okhdfcbank',
+            qr_code_url: '',
+            contact_number: '9398263810'
         }
-      });
+        });
     }
-    
-    res.json({ success: true, settings: result.rows[0] });
-  } catch (error) {
-    console.error('Error fetching payment settings:', error.message);
-    res.json({ 
-      success: true, 
-      settings: {
-        bank_name: 'Your Bank Name',
-        account_name: 'Saritha Dairy',
-        account_number: 'XXXXXXXXXXXXXX',
-        ifsc_code: 'IFSC0001234',
-        upi_id: 'sarithadairy@okhdfcbank',
-        qr_code_url: '',
-        contact_number: '9398263810'
-      }
-    });
-  }
-};
+    };
 
-// Update payment settings
-const updatePaymentSettings = async (req, res) => {
-  try {
-    const { bank_name, account_name, account_number, ifsc_code, upi_id, qr_code_url, contact_number } = req.body;
-    
-    await ensurePaymentTables();
-    
-    const existingResult = await pool.query(`SELECT * FROM payment_settings WHERE id = 1`);
-    
-    if (!existingResult.rows || existingResult.rows.length === 0) {
-      await pool.query(`
-        INSERT INTO payment_settings (id, bank_name, account_name, account_number, ifsc_code, upi_id, qr_code_url, contact_number, updated_at)
-        VALUES (1, $1, $2, $3, $4, $5, $6, $7, NOW())
-      `, [bank_name || '', account_name || '', account_number || '', ifsc_code || '', upi_id || '', qr_code_url || '', contact_number || '']);
-    } else {
-      await pool.query(`
-        UPDATE payment_settings 
-        SET bank_name = $1, account_name = $2, account_number = $3, ifsc_code = $4, 
-            upi_id = $5, qr_code_url = $6, contact_number = $7, updated_at = NOW()
-        WHERE id = 1
-      `, [bank_name || '', account_name || '', account_number || '', ifsc_code || '', upi_id || '', qr_code_url || '', contact_number || '']);
+    // Update payment settings
+    const updatePaymentSettings = async (req, res) => {
+    try {
+        const { bank_name, account_name, account_number, ifsc_code, upi_id, qr_code_url, contact_number } = req.body;
+        
+        await ensurePaymentTables();
+        
+        const existingResult = await pool.query(`SELECT * FROM payment_settings WHERE id = 1`);
+        
+        if (!existingResult.rows || existingResult.rows.length === 0) {
+        await pool.query(`
+            INSERT INTO payment_settings (id, bank_name, account_name, account_number, ifsc_code, upi_id, qr_code_url, contact_number, updated_at)
+            VALUES (1, $1, $2, $3, $4, $5, $6, $7, NOW())
+        `, [bank_name || '', account_name || '', account_number || '', ifsc_code || '', upi_id || '', qr_code_url || '', contact_number || '']);
+        } else {
+        await pool.query(`
+            UPDATE payment_settings 
+            SET bank_name = $1, account_name = $2, account_number = $3, ifsc_code = $4, 
+                upi_id = $5, qr_code_url = $6, contact_number = $7, updated_at = NOW()
+            WHERE id = 1
+        `, [bank_name || '', account_name || '', account_number || '', ifsc_code || '', upi_id || '', qr_code_url || '', contact_number || '']);
+        }
+        
+        res.json({ success: true, message: 'Payment settings updated successfully' });
+    } catch (error) {
+        console.error('Error updating payment settings:', error.message);
+        res.status(500).json({ success: false, error: error.message });
     }
-    
-    res.json({ success: true, message: 'Payment settings updated successfully' });
-  } catch (error) {
-    console.error('Error updating payment settings:', error.message);
-    res.status(500).json({ success: false, error: error.message });
-  }
-};
+    };
 
-// Get skip records
-const getSkipRecords = async (req, res) => {
-  try {
-    const result = await pool.query(`
-      SELECT s.*, c.name as customer_name, c.phone as customer_phone
-      FROM customer_skips s
-      JOIN customers c ON s.customer_id = c.id
-      ORDER BY s.created_at DESC
-    `);
-    res.json({ success: true, records: result.rows || [] });
-  } catch (error) {
-    console.error('Error fetching skip records:', error.message);
-    res.json({ success: true, records: [] });
-  }
-};
+    // Get skip records
+    const getSkipRecords = async (req, res) => {
+    try {
+        const result = await pool.query(`
+        SELECT s.*, c.name as customer_name, c.phone as customer_phone
+        FROM customer_skips s
+        JOIN customers c ON s.customer_id = c.id
+        ORDER BY s.created_at DESC
+        `);
+        res.json({ success: true, records: result.rows || [] });
+    } catch (error) {
+        console.error('Error fetching skip records:', error.message);
+        res.json({ success: true, records: [] });
+    }
+    };
 
-// Add manual skip
-const addManualSkip = async (req, res) => {
-  try {
-    const { customer_id, start_date, end_date, reason, skip_type } = req.body;
-    
-    const result = await pool.query(`
-      INSERT INTO customer_skips (customer_id, start_date, end_date, reason, skip_type, status, created_at)
-      VALUES ($1, $2, $3, $4, $5, 'active', NOW())
-      RETURNING id
-    `, [customer_id, start_date, end_date || start_date, reason, skip_type]);
-    
-    res.json({ success: true, id: result.rows[0].id });
-  } catch (error) {
-    console.error('Error adding manual skip:', error.message);
-    res.status(500).json({ success: false, error: 'Failed to add skip' });
-  }
-};
+    // Add manual skip
+    const addManualSkip = async (req, res) => {
+    try {
+        const { customer_id, start_date, end_date, reason, skip_type } = req.body;
+        
+        const result = await pool.query(`
+        INSERT INTO customer_skips (customer_id, start_date, end_date, reason, skip_type, status, created_at)
+        VALUES ($1, $2, $3, $4, $5, 'active', NOW())
+        RETURNING id
+        `, [customer_id, start_date, end_date || start_date, reason, skip_type]);
+        
+        res.json({ success: true, id: result.rows[0].id });
+    } catch (error) {
+        console.error('Error adding manual skip:', error.message);
+        res.status(500).json({ success: false, error: 'Failed to add skip' });
+    }
+    };
 
-// Cancel skip
-const cancelSkip = async (req, res) => {
-  try {
-    const { skipId } = req.params;
-    await pool.query(`UPDATE customer_skips SET status = 'cancelled', updated_at = NOW() WHERE id = $1`, [skipId]);
-    res.json({ success: true, message: 'Skip cancelled' });
-  } catch (error) {
-    console.error('Error cancelling skip:', error.message);
-    res.status(500).json({ success: false, error: 'Failed to cancel skip' });
-  }
-};
+    // Cancel skip
+    const cancelSkip = async (req, res) => {
+    try {
+        const { skipId } = req.params;
+        await pool.query(`UPDATE customer_skips SET status = 'cancelled', updated_at = NOW() WHERE id = $1`, [skipId]);
+        res.json({ success: true, message: 'Skip cancelled' });
+    } catch (error) {
+        console.error('Error cancelling skip:', error.message);
+        res.status(500).json({ success: false, error: 'Failed to cancel skip' });
+    }
+    };
 
-module.exports = {
-  getAllPayments,
-  getCustomerPayments,
-  submitPaymentRequest,
-  approvePayment,
-  rejectPayment,
-  getAllCustomerBills,
-  manualPaymentAdjustment,
-  getPaymentSettings,
-  updatePaymentSettings,
-  getSkipRecords,
-  addManualSkip,
-  cancelSkip
-};
+    module.exports = {
+    getAllPayments,
+    getCustomerPayments,
+    submitPaymentRequest,
+    approvePayment,
+    rejectPayment,
+    getAllCustomerBills,
+    manualPaymentAdjustment,
+    getPaymentSettings,
+    updatePaymentSettings,
+    getSkipRecords,
+    addManualSkip,
+    cancelSkip
+    };

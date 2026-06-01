@@ -1,5 +1,3 @@
-// controllers/customerPreferences.js
-
 const pool = require('../config/db');
 
 // Get customer preferences
@@ -28,19 +26,39 @@ exports.getPreferences = async (req, res) => {
     let skipDays = result.rows[0].skip_days;
     let extraOrders = result.rows[0].extra_orders;
     
+    // CRITICAL FIX: Always ensure skipDays is an array
     if (typeof skipDays === 'string') {
-      try { skipDays = JSON.parse(skipDays); } catch(e) { skipDays = []; }
+      try { 
+        skipDays = JSON.parse(skipDays); 
+        if (!Array.isArray(skipDays)) skipDays = [];
+      } catch(e) { 
+        skipDays = []; 
+      }
     }
+    if (!Array.isArray(skipDays)) skipDays = [];
+    
     if (typeof extraOrders === 'string') {
-      try { extraOrders = JSON.parse(extraOrders); } catch(e) { extraOrders = []; }
+      try { 
+        extraOrders = JSON.parse(extraOrders); 
+        if (!Array.isArray(extraOrders)) extraOrders = [];
+      } catch(e) { 
+        extraOrders = []; 
+      }
     }
+    if (!Array.isArray(extraOrders)) extraOrders = [];
     
     res.json({ 
       success: true, 
       data: {
-        ...result.rows[0],
+        id: result.rows[0].id,
+        customer_id: result.rows[0].customer_id,
+        want_milk: result.rows[0].want_milk ?? true,
+        quantity: result.rows[0].quantity ?? 2,
+        pack_size: result.rows[0].pack_size ?? '500ml',
         skip_days: skipDays,
-        extra_orders: extraOrders
+        extra_orders: extraOrders,
+        created_at: result.rows[0].created_at,
+        updated_at: result.rows[0].updated_at
       }
     });
   } catch (error) {
@@ -54,8 +72,37 @@ exports.savePreferences = async (req, res) => {
   const { customerId } = req.params;
   const { wantMilk, quantity, packSize, skipDays, extraOrders } = req.body;
   
-  const skipDaysStr = JSON.stringify(Array.isArray(skipDays) ? skipDays : []);
-  const extraOrdersStr = JSON.stringify(Array.isArray(extraOrders) ? extraOrders : []);
+  // CRITICAL FIX: Always ensure skipDays is an array
+  let skipDaysArray = [];
+  if (skipDays) {
+    if (Array.isArray(skipDays)) {
+      skipDaysArray = skipDays;
+    } else if (typeof skipDays === 'string') {
+      try {
+        skipDaysArray = JSON.parse(skipDays);
+        if (!Array.isArray(skipDaysArray)) skipDaysArray = [];
+      } catch(e) {
+        skipDaysArray = [];
+      }
+    }
+  }
+  
+  let extraOrdersArray = [];
+  if (extraOrders) {
+    if (Array.isArray(extraOrders)) {
+      extraOrdersArray = extraOrders;
+    } else if (typeof extraOrders === 'string') {
+      try {
+        extraOrdersArray = JSON.parse(extraOrders);
+        if (!Array.isArray(extraOrdersArray)) extraOrdersArray = [];
+      } catch(e) {
+        extraOrdersArray = [];
+      }
+    }
+  }
+  
+  const skipDaysStr = JSON.stringify(skipDaysArray);
+  const extraOrdersStr = JSON.stringify(extraOrdersArray);
   
   try {
     const result = await pool.query(`
@@ -95,10 +142,12 @@ exports.getAllPreferences = async (req, res) => {
       
       try {
         skipDays = typeof row.skip_days === 'string' ? JSON.parse(row.skip_days) : (row.skip_days || []);
+        if (!Array.isArray(skipDays)) skipDays = [];
       } catch (e) { skipDays = []; }
       
       try {
         extraOrders = typeof row.extra_orders === 'string' ? JSON.parse(row.extra_orders) : (row.extra_orders || []);
+        if (!Array.isArray(extraOrders)) extraOrders = [];
       } catch (e) { extraOrders = []; }
       
       return { ...row, skip_days: skipDays, extra_orders: extraOrders };
@@ -139,6 +188,7 @@ exports.getAllExtraOrders = async (req, res) => {
         extraOrders = typeof row.extra_orders === 'string' 
           ? JSON.parse(row.extra_orders) 
           : (row.extra_orders || []);
+        if (!Array.isArray(extraOrders)) extraOrders = [];
       } catch (e) { extraOrders = []; }
       
       const todayOrders = extraOrders.filter(o => o.date === today && !o.delivered);
@@ -194,6 +244,7 @@ exports.getDeliveryBoyExtraOrders = async (req, res) => {
         extraOrders = typeof row.extra_orders === 'string' 
           ? JSON.parse(row.extra_orders) 
           : (row.extra_orders || []);
+        if (!Array.isArray(extraOrders)) extraOrders = [];
       } catch (e) { extraOrders = []; }
       
       const todayOrders = extraOrders.filter(o => o.date === today && !o.delivered);
@@ -246,10 +297,12 @@ exports.getDeliveryBoyAssignedPreferences = async (req, res) => {
       
       try {
         skipDays = typeof row.skip_days === 'string' ? JSON.parse(row.skip_days) : (row.skip_days || []);
+        if (!Array.isArray(skipDays)) skipDays = [];
       } catch (e) { skipDays = []; }
       
       try {
         extraOrders = typeof row.extra_orders === 'string' ? JSON.parse(row.extra_orders) : (row.extra_orders || []);
+        if (!Array.isArray(extraOrders)) extraOrders = [];
       } catch (e) { extraOrders = []; }
       
       return {
@@ -274,7 +327,7 @@ exports.getDeliveryBoyAssignedPreferences = async (req, res) => {
   }
 };
 
-// ✅ FULLY FIXED: Mark extra order as delivered
+// Mark extra order as delivered
 exports.markExtraOrderDelivered = async (req, res) => {
   const { customerId, orderId } = req.params;
   
@@ -312,12 +365,12 @@ exports.markExtraOrderDelivered = async (req, res) => {
     if (typeof extraOrders === 'string') {
       try { extraOrders = JSON.parse(extraOrders); } catch(e) { extraOrders = []; }
     }
+    if (!Array.isArray(extraOrders)) extraOrders = [];
     
     console.log(`📋 Current extra orders for customer ${customerId}:`, extraOrders);
     
     let orderFound = false;
     let updatedOrders = extraOrders.map(order => {
-      // Convert both to string for comparison
       if (String(order.id) === String(orderId)) {
         if (!order.delivered) {
           orderFound = true;
@@ -325,7 +378,7 @@ exports.markExtraOrderDelivered = async (req, res) => {
           return { ...order, delivered: true };
         } else {
           console.log(`⚠️ Order ${orderId} is already marked as delivered`);
-          orderFound = true; // Still found, but already delivered
+          orderFound = true;
           return order;
         }
       }
@@ -340,14 +393,12 @@ exports.markExtraOrderDelivered = async (req, res) => {
       });
     }
     
-    // Update the database
-    const updateResult = await pool.query(
-      'UPDATE customer_preferences SET extra_orders = $1, updated_at = NOW() WHERE customer_id = $2 RETURNING *',
+    await pool.query(
+      'UPDATE customer_preferences SET extra_orders = $1, updated_at = NOW() WHERE customer_id = $2',
       [JSON.stringify(updatedOrders), customerId]
     );
     
     console.log(`✅ Successfully marked order ${orderId} as delivered`);
-    console.log(`📊 Updated extra_orders:`, JSON.stringify(updatedOrders));
     
     res.json({ 
       success: true, 
