@@ -1843,3 +1843,181 @@ body{
   cursor: not-allowed;
   opacity: 0.6;
 }
+/* Simple Extra Orders Button */
+.dd-extra-btn {
+  background: linear-gradient(135deg, #f59e0b, #ef4444);
+  margin: 16px;
+  padding: 16px 20px;
+  border-radius: 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  color: white;
+  transition: all 0.2s;
+}
+
+.dd-extra-btn:active {
+  transform: scale(0.98);
+}
+
+.dd-extra-btn-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.dd-extra-btn-left span:first-child {
+  font-size: 28px;
+}
+
+.dd-extra-btn-left h4 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.dd-extra-btn-left p {
+  margin: 4px 0 0;
+  font-size: 12px;
+  opacity: 0.9;
+}
+
+.dd-extra-btn-arrow {
+  font-size: 20px;
+  font-weight: bold;
+}
+
+/* Simple Extra Orders List */
+.dd-extra-list-simple {
+  margin: 0 16px 16px 16px;
+  background: white;
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+}
+
+.dd-extra-item-simple {
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.dd-extra-item-simple:last-child {
+  border-bottom: none;
+}
+
+.dd-extra-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 16px;
+  background: #f8fafc;
+}
+
+.dd-customer-name-simple {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.dd-customer-name-simple strong {
+  font-size: 15px;
+  color: #1e293b;
+}
+
+.dd-customer-name-simple span {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.dd-deliver-simple-btn {
+  background: #f59e0b;
+  color: white;
+  border: none;
+  padding: 8px 20px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.dd-deliver-simple-btn:active {
+  transform: scale(0.95);
+}
+
+.dd-extra-items-simple {
+  padding: 8px 0;
+}
+
+.dd-order-item-simple {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.dd-order-item-simple:last-child {
+  border-bottom: none;
+}
+
+.dd-order-name {
+  flex: 2;
+  font-weight: 500;
+  font-size: 14px;
+  color: #1e293b;
+}
+
+.dd-order-size {
+  flex: 1;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.dd-order-qty {
+  background: #f1f5f9;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+}
+
+.dd-order-price {
+  min-width: 60px;
+  text-align: right;
+  font-weight: 700;
+  color: #10b981;
+  font-size: 14px;
+}
+
+/* Simple Quick Actions */
+.dd-quick-actions-simple {
+  display: flex;
+  gap: 12px;
+  margin: 16px;
+}
+
+.dd-quick-btn {
+  flex: 1;
+  background: #f1f5f9;
+  padding: 14px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-weight: 500;
+  color: #475569;
+}
+
+.dd-quick-btn:active {
+  transform: scale(0.97);
+  background: #e2e8f0;
+}
+
+.dd-quick-btn span:first-child {
+  font-size: 20px;
+}

@@ -1,4 +1,5 @@
 // src/pages/Admin/CustomerManagement/CustomerManagement.jsx
+
 import React, { useState, useEffect } from 'react';
 import './CustomerManagement.css';
 
@@ -50,6 +51,52 @@ const CustomerManagement = () => {
   const showMessage = (type, text) => {
     setMessage({ type, text });
     setTimeout(() => setMessage(null), 3500);
+  };
+
+  // Sync milk preferences to customer_preferences table
+  const syncMilkPreferences = async (customerId, dailyProducts) => {
+    try {
+      // Find the milk product from daily products
+      const milkProduct = dailyProducts.find(p => p.product_name === 'Milk');
+      
+      if (milkProduct) {
+        const packSize = milkProduct.pack_size || '500ml';
+        const quantity = milkProduct.quantity || 2;
+        
+        // Get existing preferences first
+        const getRes = await fetch(`${API_URL}/customer-preferences/${customerId}`, {
+          headers: getAuthHeaders()
+        });
+        const existingPrefs = await getRes.json();
+        
+        let existingSkipDays = [];
+        let existingExtraOrders = [];
+        let existingWantMilk = true;
+        
+        if (existingPrefs.success && existingPrefs.data) {
+          existingSkipDays = existingPrefs.data.skip_days || [];
+          existingExtraOrders = existingPrefs.data.extra_orders || [];
+          existingWantMilk = existingPrefs.data.want_milk ?? true;
+        }
+        
+        // Save/update preferences with correct milk settings
+        await fetch(`${API_URL}/customer-preferences/${customerId}`, {
+          method: 'POST',
+          headers: getAuthHeaders(),
+          body: JSON.stringify({
+            wantMilk: existingWantMilk,
+            quantity: quantity,
+            packSize: packSize,
+            skipDays: existingSkipDays,
+            extraOrders: existingExtraOrders
+          })
+        });
+        
+        console.log(`✅ Synced milk preferences for customer ${customerId}: ${quantity} × ${packSize}`);
+      }
+    } catch (error) {
+      console.error('Error syncing milk preferences:', error);
+    }
   };
 
   const fetchCustomers = async () => {
@@ -159,6 +206,14 @@ const CustomerManagement = () => {
       const data = await response.json();
       
       if (data.success) {
+        // Get the customer ID from response
+        const customerId = data.customer?.id || (editingCustomer?.id);
+        
+        // Sync milk preferences to customer_preferences table
+        if (customerId) {
+          await syncMilkPreferences(customerId, formData.dailyProducts);
+        }
+        
         showMessage('success', editingCustomer ? 'Customer updated!' : `Customer created!`);
         closeModal();
         fetchCustomers();
@@ -275,7 +330,7 @@ const CustomerManagement = () => {
     setFormData({
       name: '', email: '', phone: '', password: '', registrationNumber: '', alternatePhone: '',
       address: { area: '', colony: '', apartment: '', flatNo: '', landmark: '', pincode: '', city: '', state: '' },
-      dailyProducts: [{ product_name: 'Milk', pack_size: '500ml', quantity: 1, price: 30 }],
+      dailyProducts: [{ product_name: 'Milk', pack_size: '500ml', quantity: 1, price: 48 }],
       deliveryTime: 'morning', notes: ''
     });
   };
@@ -309,7 +364,7 @@ const CustomerManagement = () => {
       registrationNumber: customer.registrationNumber || '',
       alternatePhone: customer.alternatePhone || '',
       address: customer.address || { area: '', colony: '', apartment: '', flatNo: '', landmark: '', pincode: '', city: '', state: '' },
-      dailyProducts: customer.dailyProducts?.length ? customer.dailyProducts : [{ product_name: 'Milk', pack_size: '500ml', quantity: 1, price: 30 }],
+      dailyProducts: customer.dailyProducts?.length ? customer.dailyProducts : [{ product_name: 'Milk', pack_size: '500ml', quantity: 1, price: 48 }],
       deliveryTime: customer.deliveryTime || 'morning',
       notes: customer.notes || ''
     });

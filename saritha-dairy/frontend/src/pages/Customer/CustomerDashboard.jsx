@@ -1,4 +1,5 @@
 // src/pages/Customer/CustomerDashboard.jsx
+
 import React, { useState, useEffect } from 'react';
 import './CustomerDashboard.css';
 
@@ -30,6 +31,9 @@ const CustomerDashboard = () => {
   const [calendarMonth, setCalendarMonth] = useState(new Date().getMonth());
   const [calendarYear, setCalendarYear] = useState(new Date().getFullYear());
   const [isRefreshing, setIsRefreshing] = useState(false);
+  
+  // Customer's daily products from admin (source of truth)
+  const [customerDailyProducts, setCustomerDailyProducts] = useState([]);
   
   // Payment States
   const [showPaymentModal, setShowPaymentModal] = useState(false);
@@ -70,12 +74,33 @@ const CustomerDashboard = () => {
     'Authorization': `Bearer ${getToken()}`
   });
 
+  // Get milk price based on pack size
+  const getMilkPrice = (packSize) => {
+    if (packSize === '1L') return 95;
+    return 48; // 500ml
+  };
+
+  // Extract milk product from daily products
+  const getMilkFromDailyProducts = () => {
+    if (!customerDailyProducts || customerDailyProducts.length === 0) return null;
+    const milkProduct = customerDailyProducts.find(p => p.product_name === 'Milk');
+    if (milkProduct) {
+      return {
+        packSize: milkProduct.pack_size || '500ml',
+        quantity: milkProduct.quantity || 2,
+        price: milkProduct.price || getMilkPrice(milkProduct.pack_size || '500ml')
+      };
+    }
+    return null;
+  };
+
   useEffect(() => {
     if (!userData?.id) { 
       window.location.href = '/login'; 
       return; 
     }
     loadCustomerData();
+    fetchCustomerDailyProducts();
     fetchAllProducts();
     fetchPaymentData();
     fetchPaymentSettings();
@@ -95,13 +120,47 @@ const CustomerDashboard = () => {
   }, []);
 
   useEffect(() => {
-    const today = new Date().toISOString().split('T')[0];
-    setCartCount(extraOrders.filter(o => o.date === today && !o.delivered).length);
+    const todayDate = new Date().toISOString().split('T')[0];
+    setCartCount(extraOrders.filter(o => o.date === todayDate && !o.delivered).length);
   }, [extraOrders]);
 
   useEffect(() => {
     if (confetti) { const t = setTimeout(() => setConfetti(false), 2000); return () => clearTimeout(t); }
   }, [confetti]);
+
+  // Fetch customer's daily products from admin (source of truth)
+  const fetchCustomerDailyProducts = async () => {
+    try {
+      const response = await fetch(`${API_URL}/admin/customers/${userData.id}`, {
+        headers: getAuthHeaders()
+      });
+      const data = await response.json();
+      if (data.success && data.customer) {
+        const dailyProducts = data.customer.daily_products || [];
+        setCustomerDailyProducts(dailyProducts);
+        
+        // Sync milk settings from daily products
+        const milkData = dailyProducts.find(p => p.product_name === 'Milk');
+        if (milkData) {
+          const newPackSize = milkData.pack_size || '500ml';
+          const newQuantity = milkData.quantity || 2;
+          
+          setPreferences(prev => ({
+            ...prev,
+            packSize: newPackSize,
+            quantity: newQuantity
+          }));
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching customer daily products:', error);
+    }
+  };
+
+  // Check if a date is skipped
+  const isDateSkipped = (date) => {
+    return preferences.skipDays?.includes(date);
+  };
 
   // Fetch payment settings
   const fetchPaymentSettings = async () => {
@@ -279,6 +338,9 @@ const CustomerDashboard = () => {
   const loadCustomerData = async () => {
     setLoading(true);
     try {
+      // First fetch daily products from admin (source of truth)
+      await fetchCustomerDailyProducts();
+      
       const deliveriesRes = await fetch(`${API_URL}/delivery/customer/${userData.id}`, { 
         headers: getAuthHeaders() 
       });
@@ -307,10 +369,14 @@ const CustomerDashboard = () => {
           try { extraOrdersData = JSON.parse(extraOrdersData); } catch (e) { extraOrdersData = []; }
         }
         
+        // Get milk from daily products (already set by fetchCustomerDailyProducts)
+        const milkFromDaily = getMilkFromDailyProducts();
+        
+        // Use daily products values as priority
         setPreferences({
           wantMilk: prefData.data.want_milk ?? true,
-          quantity: prefData.data.quantity ?? 2,
-          packSize: prefData.data.pack_size ?? '500ml',
+          quantity: milkFromDaily?.quantity ?? prefData.data.quantity ?? 2,
+          packSize: milkFromDaily?.packSize ?? prefData.data.pack_size ?? '500ml',
           skipDays: Array.isArray(skipDays) ? skipDays : []
         });
         
@@ -345,6 +411,7 @@ const CustomerDashboard = () => {
   const refreshData = async () => {
     setIsRefreshing(true);
     showMessage('info', '🔄 Refreshing data...');
+    await fetchCustomerDailyProducts();
     await loadCustomerData();
     await fetchPaymentData();
     showMessage('success', '✅ Data refreshed!');
@@ -412,17 +479,26 @@ const CustomerDashboard = () => {
   const getDaysInMonth = (month, year) => new Date(year, month + 1, 0).getDate();
   const getMonthName = (month) => ['January','February','March','April','May','June','July','August','September','October','November','December'][month];
 
-  const isDateSkipped = (day, month, year) => {
-    const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-    return preferences.skipDays?.includes(dateStr);
-  };
-
   const toggleCalendarDate = (day, month, year) => {
     const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    const todayDate = new Date().toISOString().split('T')[0];
+    
+    if (dateStr < todayDate) {
+      showMessage('error', 'Cannot modify past dates');
+      return;
+    }
+    
     const newSkip = preferences.skipDays?.includes(dateStr)
       ? preferences.skipDays.filter(d => d !== dateStr)
       : [...(preferences.skipDays || []), dateStr];
+      
     savePreferences({ ...preferences, skipDays: newSkip });
+    
+    if (preferences.skipDays?.includes(dateStr)) {
+      showMessage('success', `✅ Delivery restored for ${new Date(dateStr).toLocaleDateString()}`);
+    } else {
+      showMessage('success', `🚫 Delivery skipped for ${new Date(dateStr).toLocaleDateString()}`);
+    }
   };
 
   const changeMonth = (delta) => {
@@ -444,14 +520,14 @@ const CustomerDashboard = () => {
     }
     
     const pack = selectedProduct.packs.find(p => `${p.size}${p.unit}` === selectedPackSize);
-    const today = new Date().toISOString().split('T')[0];
+    const todayDate = new Date().toISOString().split('T')[0];
     const newOrder = { 
       id: Date.now(), 
       productName: selectedProduct.name, 
       packSize: selectedPackSize, 
       quantity: orderQuantity, 
       price: pack?.price || 0, 
-      date: today, 
+      date: todayDate, 
       imageUrl: selectedProduct.imageUrl, 
       status: 'pending',
       delivered: false 
@@ -518,7 +594,7 @@ const CustomerDashboard = () => {
     return 'default';
   };
 
-  const today = new Date().toISOString().split('T')[0];
+  const todayDate = new Date().toISOString().split('T')[0];
   
   const milkDeliveriesFromDb = deliveries.filter(d => 
     d.product_name === 'Milk' && 
@@ -536,13 +612,13 @@ const CustomerDashboard = () => {
   const grandTotal = milkTotal + extraFromDeliveriesTotal;
   
   const todaysMilkDelivery = deliveries.find(d => 
-    d.delivery_date?.startsWith(today) && 
+    d.delivery_date?.startsWith(todayDate) && 
     d.product_name === 'Milk' && 
     d.status === 'delivered'
   );
   
   const todaysExtraDeliveries = deliveries.filter(d => 
-    d.delivery_date?.startsWith(today) && 
+    d.delivery_date?.startsWith(todayDate) && 
     d.product_name !== 'Milk' && 
     d.status === 'delivered'
   );
@@ -901,6 +977,36 @@ const CustomerDashboard = () => {
                 <button className="cst-wallet-history-btn" onClick={() => setShowPaymentHistory(true)}>📜 History</button>
               </div>
               
+              {/* Skip Info Card - Shows active skips */}
+              {preferences.skipDays && preferences.skipDays.filter(date => date >= todayDate).length > 0 && (
+                <div className="cst-skip-info-card">
+                  <div className="cst-skip-header">
+                    <span>🚫</span>
+                    <h4>Skipped Delivery Dates</h4>
+                  </div>
+                  <div className="cst-skip-dates">
+                    {preferences.skipDays.filter(date => date >= todayDate).sort().map(date => (
+                      <span key={date} className="cst-skip-date-badge">
+                        {new Date(date).toLocaleDateString()}
+                        <button 
+                          onClick={() => {
+                            const newSkips = preferences.skipDays.filter(d => d !== date);
+                            savePreferences({ ...preferences, skipDays: newSkips });
+                            showMessage('success', `Delivery restored for ${new Date(date).toLocaleDateString()}`);
+                          }}
+                          className="cst-unschedule-skip"
+                        >
+                          ✕
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                  <p className="cst-skip-note">
+                    ⚠️ No delivery will be made on these dates. You can unschedule anytime.
+                  </p>
+                </div>
+              )}
+              
               <div className="cst-bill-details">
                 <div className="cst-bill-detail-card milk">
                   <div className="cst-bill-card-icon">🥛</div>
@@ -1018,45 +1124,100 @@ const CustomerDashboard = () => {
           </div>
         )}
 
-        {/* PREFERENCES TAB */}
+        {/* PREFERENCES TAB - UPDATED WITH CORRECT PRICES */}
         {activeTab === 'preferences' && (
           <div className="cst-section">
             <h3>🥛 Milk Settings</h3>
             
+            {/* Daily Delivery Toggle */}
             <div className="cst-pref-magic">
               <span>Daily Delivery</span>
               <label className="cst-toggle-magic">
-                <input type="checkbox" checked={preferences.wantMilk} onChange={e=>savePreferences({...preferences,wantMilk:e.target.checked})}/>
+                <input type="checkbox" checked={preferences.wantMilk} onChange={e => savePreferences({...preferences, wantMilk: e.target.checked})}/>
                 <span></span>
               </label>
             </div>
             {!preferences.wantMilk && <p style={{color:'#ef4444',fontSize:'11px',textAlign:'center',marginTop:'8px'}}>⏸️ Milk delivery is paused</p>}
 
-            <div className="cst-pref-magic">
-              <p>Quantity per day</p>
-              <div className="cst-chips-glass">
-                {[1,2,3,4,5].map(q=>(
-                  <button key={q} className={`cst-chip-glass ${preferences.quantity===q?'active':''}`} onClick={()=>savePreferences({...preferences,quantity:q})}>
-                    {q} pkt
-                  </button>
-                ))}
+            {/* Pack Size Selection - Modern Card Style with Correct Prices */}
+            <div className="cst-pref-card">
+              <div className="cst-pref-card-header">
+                <span>📦</span>
+                <div>
+                  <h4>Pack Size</h4>
+                  <p>Choose your preferred milk pack size</p>
+                </div>
+              </div>
+              <div className="cst-packsize-grid">
+                <button 
+                  className={`cst-packsize-btn ${preferences.packSize === '500ml' ? 'active' : ''}`}
+                  onClick={() => savePreferences({...preferences, packSize: '500ml'})}
+                >
+                  <span className="cst-packsize-icon">🥛</span>
+                  <span className="cst-packsize-name">500ml</span>
+                  <span className="cst-packsize-price">₹48</span>
+                </button>
+                <button 
+                  className={`cst-packsize-btn ${preferences.packSize === '1L' ? 'active' : ''}`}
+                  onClick={() => savePreferences({...preferences, packSize: '1L'})}
+                >
+                  <span className="cst-packsize-icon">🥛🥛</span>
+                  <span className="cst-packsize-name">1 Liter</span>
+                  <span className="cst-packsize-price">₹95</span>
+                </button>
               </div>
             </div>
 
-            <div className="cst-pref-magic">
-              <p>Pack Size</p>
-              <div className="cst-chips-glass">
-                {['500ml','1L'].map(s=>(
-                  <button key={s} className={`cst-chip-glass ${preferences.packSize===s?'active':''}`} onClick={()=>savePreferences({...preferences,packSize:s})}>
-                    {s}
-                  </button>
-                ))}
+            {/* Quantity Selection with +/- Buttons */}
+            <div className="cst-pref-card">
+              <div className="cst-pref-card-header">
+                <span>🔢</span>
+                <div>
+                  <h4>Quantity per day</h4>
+                  <p>How many packs do you need daily?</p>
+                </div>
+              </div>
+              <div className="cst-quantity-control">
+                <button 
+                  className="cst-qty-control-btn"
+                  onClick={() => {
+                    if (preferences.quantity > 1) {
+                      savePreferences({...preferences, quantity: preferences.quantity - 1})
+                    }
+                  }}
+                  disabled={preferences.quantity <= 1}
+                >
+                  −
+                </button>
+                <div className="cst-quantity-display">
+                  <span className="cst-quantity-number">{preferences.quantity}</span>
+                  <span className="cst-quantity-unit">pack{preferences.quantity > 1 ? 's' : ''}</span>
+                </div>
+                <button 
+                  className="cst-qty-control-btn"
+                  onClick={() => savePreferences({...preferences, quantity: preferences.quantity + 1})}
+                >
+                  +
+                </button>
+              </div>
+              <div className="cst-daily-summary">
+                <span>Daily total:</span>
+                <strong>
+                  ₹{(preferences.packSize === '500ml' ? 48 : 95) * preferences.quantity}
+                </strong>
+                <small>({preferences.packSize} × {preferences.quantity})</small>
               </div>
             </div>
 
-            <div className="cst-pref-magic">
-              <p>📅 Skip Specific Dates</p>
-              <p style={{fontSize:'10px',color:'#888',marginBottom:'8px'}}>Tap dates you want to skip delivery</p>
+            {/* Skip Dates Calendar */}
+            <div className="cst-pref-card">
+              <div className="cst-pref-card-header">
+                <span>📅</span>
+                <div>
+                  <h4>Skip Specific Dates</h4>
+                  <p>Tap dates you want to skip delivery</p>
+                </div>
+              </div>
               
               <div className="cst-calendar">
                 <div className="cst-calendar-header">
@@ -1066,7 +1227,7 @@ const CustomerDashboard = () => {
                 </div>
 
                 <div className="cst-calendar-day-headers">
-                  {['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d => (
+                  {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => (
                     <span key={d} className="cst-calendar-day-header">{d}</span>
                   ))}
                 </div>
@@ -1074,9 +1235,10 @@ const CustomerDashboard = () => {
                 <div className="cst-calendar-grid">
                   {calendarDays.map((day, i) => {
                     if (day === null) return <div key={`empty-${i}`} className="cst-calendar-day empty"></div>;
-                    const skipped = isDateSkipped(day, calendarMonth, calendarYear);
+                    const dateStr = `${calendarYear}-${String(calendarMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                    const skipped = preferences.skipDays?.includes(dateStr);
                     const isToday = day === new Date().getDate() && calendarMonth === new Date().getMonth() && calendarYear === new Date().getFullYear();
-                    const isPast = new Date(calendarYear, calendarMonth, day) < new Date(new Date().toDateString());
+                    const isPast = dateStr < todayDate;
                     
                     return (
                       <button
@@ -1092,10 +1254,11 @@ const CustomerDashboard = () => {
                   })}
                 </div>
               </div>
+              <p className="cst-calendar-note">📌 Tap on any future date to skip or restore delivery</p>
             </div>
 
             <button onClick={()=>savePreferences(preferences)} className="cst-btn-magic full" disabled={saving}>
-              {saving?'⏳ Saving...':'💾 Save Settings'}
+              {saving ? '⏳ Saving...' : '💾 Save Settings'}
             </button>
           </div>
         )}
